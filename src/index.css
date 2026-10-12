@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --adr-maroon: #651D2A;
+    --adr-maroon-dark: #4B141E;
+    --adr-maroon-light: #8A2B3C;
+    --adr-maroon-subtle: #F8EDEF;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  code, kbd, samp, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Touch friendly utilities for field operators */
+.touch-press:active {
+  transform: scale(0.97);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(230, 225, 227, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 145, 150, 0.7);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(101, 29, 42, 0.8);
+}
+
+/* Print Styles for Official ADR Executive Management Report */
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  header, nav, aside, .no-print, button, .bottom-nav, .simulation-banner {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-container {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}

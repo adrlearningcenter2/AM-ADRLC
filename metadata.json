@@ -1,0 +1,6 @@
+{
+  "name": "AM Digital ADR V2",
+  "description": "Sistem digital pemeriksaan inventaris, inspeksi mingguan, monitoring abnormalitas, dan fasilitas ADR Learning Center.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
