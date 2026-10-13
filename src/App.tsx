@@ -141,7 +141,11 @@ function AppContent() {
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
             {liveError && <div role="alert" className="mb-4 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl">Koneksi LIVE gagal: {liveError}. Data simulasi tidak ditampilkan.</div>}
             <div className="text-xs text-stone-500 mb-3">Sumber: Google Sheets via API · Sinkronisasi: {lastSync || 'Belum berhasil'}</div>
-            {adminView !== 'dashboard' && <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl">Modul {adminView} belum tersambung sepenuhnya ke API LIVE. Ditahan agar tidak menampilkan data dummy. Dashboard tetap mengambil data aktual.</div>}
+            {adminView !== 'dashboard' && adminView !== 'monitoring' && (
+              <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl">
+                Modul {adminView} belum tersambung sepenuhnya ke API LIVE. Ditahan agar tidak menampilkan data dummy. Dashboard tetap mengambil data aktual.
+              </div>
+            )}
 
             {adminView === 'dashboard' && kpi && (
               <ExecutiveDashboard
@@ -153,11 +157,8 @@ function AppContent() {
               />
             )}
 
-            {false && adminView === 'monitoring' && (
-              <InspectionMonitoring
-                initialRoom={monitoringInitialRoom}
-                onViewPhoto={handleOpenPhoto}
-              />
+            {adminView === 'monitoring' && (
+              <LiveRoomsView />
             )}
 
             {false && adminView === 'findings' && (

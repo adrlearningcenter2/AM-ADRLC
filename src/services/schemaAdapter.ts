@@ -295,8 +295,9 @@ export function serializeInspectionForGAS(
   const inspectionRow: Partial<SheetInspectionRow> = {
     inspection_id: inspectionId,
     week_key: payload.week,
-    asset_id: payload.unitId,
     room_id: payload.room,
+    asset_id: payload.unitId,
+    checklist_snapshot: '',
     answers_json: answersJson,
     physical_qty: payload.physical ?? '',
     usable_qty: payload.usable ?? '',

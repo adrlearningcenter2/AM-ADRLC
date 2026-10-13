@@ -518,8 +518,8 @@ var InspectionService = (function() {
       var inspectionRow = {
         'inspection_id': inspectionId,
         'week_key': weekKey,
-        'asset_id': unitId,
         'room_id': room,
+        'asset_id': unitId,
         'checklist_snapshot': '',
         'answers_json': answersJson,
         'physical_qty': payload.physical !== undefined ? payload.physical : '',

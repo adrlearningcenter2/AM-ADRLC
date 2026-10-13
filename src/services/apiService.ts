@@ -81,7 +81,9 @@ export class ApiService {
 
   static getCurrentToken(): string {
     try {
-      const stored = localStorage.getItem('am_digital_adr_auth_session');
+      const stored =
+        sessionStorage.getItem('am_digital_adr_auth_session') ||
+        localStorage.getItem('am_digital_adr_auth_session');
       if (stored) {
         const parsed = JSON.parse(stored);
         return parsed.token || '';
@@ -988,7 +990,7 @@ export class ApiService {
     token: string = ''
   ): Promise<any> {
     const url = this.config.gasEndpointUrl;
-    const isTestMode = this.config.testMode ?? false;
+    const effectiveToken = (token && token.trim()) ? token.trim() : this.getCurrentToken();
 
     // 1. Primary: Server-side API Proxy /api/rpc
     try {
@@ -996,11 +998,10 @@ export class ApiService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          
         },
         body: JSON.stringify({
           action: functionName,
-          token,
+          token: effectiveToken,
           params,
           targetUrl: url || undefined,
         }),
