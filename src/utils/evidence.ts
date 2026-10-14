@@ -1,16 +1,32 @@
+function isAppEntityId(id: string): boolean {
+  return /^(UNT|CHK|INSP|FND|ROOM|USR|UNIT|ASSET|POINT)-/i.test(id);
+}
+
 /**
  * Normalize Google Drive file IDs, historical V1/V2 records, and links
  * into secure preview URLs served via server-side authenticated proxy.
  */
 export function resolveEvidenceUrl(input?: string | null): string {
-  const value = String(input || '').trim();
+  let value = String(input || '').trim();
   if (!value || value === 'null' || value === 'undefined' || value === '-') return '';
+
+  // Fix unencoded SVG data URIs for iOS Safari and Android Chrome compatibility
+  if (value.startsWith('data:image/svg+xml;utf8,<svg') || value.startsWith('data:image/svg+xml;utf8,%3Csvg')) {
+    const rawSvg = value.replace(/^data:image\/svg\+xml;utf8,/i, '');
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(decodeURIComponent(rawSvg))}`;
+  }
+
   if (/^data:image\//i.test(value)) return value;
   if (/^blob:/i.test(value)) return value;
 
   // Safe mode or mock placeholders
   if (value.startsWith('SAFE-MODE') || value.startsWith('MOCK') || value.startsWith('SAFE_MODE')) {
     return `/api/photo/${encodeURIComponent(value)}`;
+  }
+
+  // Reject internal entity identifiers (e.g. UNT-RT1-01, UNIT-0002, CHK-...)
+  if (isAppEntityId(value)) {
+    return '';
   }
 
   // Already an /api/photo URL
@@ -25,7 +41,7 @@ export function resolveEvidenceUrl(input?: string | null): string {
       const host = url.hostname.toLowerCase();
       if (host === 'drive.google.com' || host === 'docs.google.com') {
         const id = url.searchParams.get('id') || url.pathname.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
-        if (id) return `/api/photo/${encodeURIComponent(id)}`;
+        if (id && !isAppEntityId(id)) return `/api/photo/${encodeURIComponent(id)}`;
       }
       return url.protocol === 'https:' ? url.href : '';
     } catch {
@@ -33,8 +49,8 @@ export function resolveEvidenceUrl(input?: string | null): string {
     }
   }
 
-  // Pure alphanumeric Drive File ID
-  if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) {
+  // Pure alphanumeric Drive File ID (typically 20+ chars, e.g. 1a2B3c4D...)
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(value) && !isAppEntityId(value)) {
     return `/api/photo/${encodeURIComponent(value)}`;
   }
 
@@ -45,19 +61,24 @@ export function extractDriveFileId(input?: string | null): string {
   const value = String(input || '').trim();
   if (!value) return '';
   if (value.startsWith('SAFE-MODE') || value.startsWith('MOCK') || value.startsWith('SAFE_MODE')) return value;
+  if (isAppEntityId(value)) return '';
 
   // 1. Matches /api/photo/:fileId or /api/photo?id=:fileId
   const apiMatch = value.match(/\/api\/photo(?:\/([a-zA-Z0-9_-]+)|\?.*?(?:id|fileId)=([a-zA-Z0-9_-]+))/i);
   if (apiMatch) {
-    return apiMatch[1] || apiMatch[2] || '';
+    const candidate = apiMatch[1] || apiMatch[2] || '';
+    return isAppEntityId(candidate) ? '' : candidate;
   }
 
   // 2. Google Drive /d/ID or ?id=ID
   const match = value.match(/\/d\/([a-zA-Z0-9_-]+)/) || value.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (match) return match[1];
+  if (match) {
+    const candidate = match[1];
+    return isAppEntityId(candidate) ? '' : candidate;
+  }
 
-  // 3. Direct alphanumeric File ID
-  if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) {
+  // 3. Direct alphanumeric File ID (typical Drive IDs are 20+ chars)
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(value) && !isAppEntityId(value)) {
     return value;
   }
 

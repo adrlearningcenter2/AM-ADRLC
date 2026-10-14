@@ -264,8 +264,8 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
     }
   }
 
-  // 3. Fallback: Clean SVG notice with 404 status so client img onError handler fires accurately
-  res.status(404);
+  // 3. Fallback: Clean SVG notice with 200 OK so mobile browsers (iOS Safari/Android) render it without broken image icon
+  res.status(200);
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
   res.setHeader('X-Drive-File-Id', fileId);
   res.send(createSvgNotice('Foto Privat Google Drive', 'Akses dibatasi atau file memerlukan izin akun Google', `ID: ${fileId}`));
