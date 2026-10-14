@@ -93,8 +93,45 @@ var DriveService = (function() {
     }
   }
 
+  /**
+   * Retrieves a photo from Google Drive as base64 data.
+   */
+  function getPhoto(fileId) {
+    if (!fileId) {
+      return { success: false, error: 'File ID tidak boleh kosong.' };
+    }
+    var cleanId = String(fileId).trim();
+    if (cleanId.indexOf('SAFE-MODE') === 0 || cleanId.indexOf('MOCK') === 0) {
+      return {
+        success: true,
+        isSafeMode: true,
+        fileId: cleanId,
+        message: 'Foto dicatat dalam Safe Mode simulasi.'
+      };
+    }
+    try {
+      var file = DriveApp.getFileById(cleanId);
+      var blob = file.getBlob();
+      var b64 = Utilities.base64Encode(blob.getBytes());
+      return {
+        success: true,
+        fileId: cleanId,
+        name: file.getName(),
+        mimeType: blob.getContentType(),
+        base64: 'data:' + blob.getContentType() + ';base64,' + b64
+      };
+    } catch (e) {
+      return {
+        success: false,
+        fileId: cleanId,
+        error: e.message || 'File tidak ditemukan di Google Drive atau tidak dapat diakses.'
+      };
+    }
+  }
+
   return {
     uploadPhoto: uploadPhoto,
+    getPhoto: getPhoto,
     getOrCreateFolder: getOrCreateFolder
   };
 })();

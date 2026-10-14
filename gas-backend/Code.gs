@@ -210,6 +210,10 @@ function doPost(e) {
         resultData = InspectionService.closeFinding(token, params.findingId, params.note, params.photo);
         break;
 
+      case 'getPhoto':
+        resultData = DriveService.getPhoto(params.fileId);
+        break;
+
       // ----------------------------------------------------------------------
       // REQUESTS (DISPENSATIONS & APPROVALS)
       // ----------------------------------------------------------------------

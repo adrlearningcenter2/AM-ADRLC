@@ -92,6 +92,129 @@ app.get(
 );
 
 // ---------------------------------------------------------------------------
+// Photo Evidence Proxy Endpoint (/api/photo/:fileId & /api/photo-proxy)
+// Handles Google Drive authenticated viewing, Safe Mode notices, and prevents broken images.
+// ---------------------------------------------------------------------------
+function createSvgNotice(title: string, subtitle: string, detail?: string): string {
+  const safeTitle = title.replace(/[<>&"]/g, '');
+  const safeSubtitle = subtitle.replace(/[<>&"]/g, '');
+  const safeDetail = (detail || '').replace(/[<>&"]/g, '');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+    <rect width="600" height="400" fill="#1c1917" rx="16"/>
+    <rect x="20" y="20" width="560" height="360" fill="none" stroke="#44403c" stroke-width="2" stroke-dasharray="6,6" rx="12"/>
+    <circle cx="300" cy="140" r="44" fill="#292524" stroke="#78716c" stroke-width="2"/>
+    <path d="M282 135h36M300 117v36" fill="none" stroke="#a8a29e" stroke-width="3" stroke-linecap="round"/>
+    <text x="300" y="220" text-anchor="middle" fill="#f5f5f4" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="bold">${safeTitle}</text>
+    <text x="300" y="250" text-anchor="middle" fill="#d6d3d1" font-family="system-ui, -apple-system, sans-serif" font-size="14">${safeSubtitle}</text>
+    ${safeDetail ? `<text x="300" y="280" text-anchor="middle" fill="#a8a29e" font-family="system-ui, -apple-system, sans-serif" font-size="12">${safeDetail}</text>` : ''}
+    <text x="300" y="340" text-anchor="middle" fill="#78716c" font-family="system-ui, -apple-system, sans-serif" font-size="11">AM Digital ADR V2 · ADR Learning Center</text>
+  </svg>`;
+}
+
+async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
+  const rawId = req.params.fileId || (req.query.id as string) || (req.query.fileId as string) || '';
+  const cleanId = decodeURIComponent(String(rawId).trim());
+
+  if (!cleanId || cleanId === 'null' || cleanId === 'undefined' || cleanId === '-') {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.send(createSvgNotice('Foto Tidak Dilampirkan', 'Tidak ada file bukti foto untuk temuan ini.'));
+    return;
+  }
+
+  // Handle Base64 data URL directly
+  if (cleanId.startsWith('data:image/')) {
+    const matches = cleanId.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (matches) {
+      const mime = matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(buffer);
+      return;
+    }
+  }
+
+  // Handle Safe Mode or Mock File ID
+  if (cleanId.startsWith('SAFE-MODE') || cleanId.startsWith('MOCK') || cleanId.startsWith('SAFE_MODE')) {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.send(createSvgNotice('Dokumentasi Mode Simulasi', 'Foto tercatat dalam Safe Mode backend', `ID: ${cleanId}`));
+    return;
+  }
+
+  // Extract pure file ID if given a full URL
+  let fileId = cleanId;
+  const driveMatch = cleanId.match(/\/d\/([a-zA-Z0-9_-]+)/) || cleanId.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    fileId = driveMatch[1];
+  }
+
+  // 1. Try public Google Drive thumbnail endpoint
+  try {
+    const thumbUrl = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200`;
+    const googleRes = await fetch(thumbUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      },
+    });
+
+    const cType = googleRes.headers.get('content-type') || '';
+    if (googleRes.ok && cType.startsWith('image/')) {
+      const arrayBuffer = await googleRes.arrayBuffer();
+      res.setHeader('Content-Type', cType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(Buffer.from(arrayBuffer));
+      return;
+    }
+  } catch (err) {
+    // Continue to GAS authenticated fallback
+  }
+
+  // 2. Authenticated Google Apps Script Fallback (for private files)
+  const gasUrl = process.env.GAS_WEB_APP_URL || '';
+  const proxySecret = process.env.ADR_PROXY_SECRET || process.env.GAS_PROXY_SECRET || '';
+
+  if (gasUrl && gasUrl.startsWith('https://script.google.com/')) {
+    try {
+      const gasRes = await fetch(gasUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Proxy-Secret': proxySecret,
+        },
+        body: JSON.stringify({
+          action: 'getPhoto',
+          params: { fileId },
+          proxySecret,
+        }),
+      });
+
+      if (gasRes.ok) {
+        const json = await gasRes.json();
+        if (json && json.success && json.base64 && typeof json.base64 === 'string') {
+          const parts = json.base64.split('base64,');
+          const mime = json.mimeType || (json.base64.match(/^data:([^;]+);/)?.[1] || 'image/jpeg');
+          const buffer = Buffer.from(parts[parts.length - 1], 'base64');
+          res.setHeader('Content-Type', mime);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.send(buffer);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to clean SVG notice
+    }
+  }
+
+  // 3. Fallback: Clean SVG notice instead of browser broken image
+  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.send(createSvgNotice('Foto Privat Google Drive', 'Akses dibatasi atau file memerlukan izin akun Google', `ID: ${fileId}`));
+}
+
+app.get('/api/photo/:fileId', createRateLimiter(180, 60000), handlePhotoRequest);
+app.get('/api/photo-proxy', createRateLimiter(180, 60000), handlePhotoRequest);
+
+// ---------------------------------------------------------------------------
 // Secure Proxy Endpoint (/api/rpc)
 // ---------------------------------------------------------------------------
 app.post(

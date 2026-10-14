@@ -14,11 +14,57 @@ var InspectionService = (function() {
   function normalizeWeek(val) {
     if (!val) return '';
     if (val instanceof Date) {
-      return Utilities.formatDate(val, 'Asia/Jakarta', 'yyyy-MM-dd');
+      try {
+        return Utilities.formatDate(val, 'Asia/Jakarta', 'yyyy-MM-dd');
+      } catch(e) {
+        var yr = val.getFullYear();
+        var mo = ('0' + (val.getMonth() + 1)).slice(-2);
+        var da = ('0' + val.getDate()).slice(-2);
+        return yr + '-' + mo + '-' + da;
+      }
     }
     var s = String(val).trim();
-    var match = s.match(/(\d{4}-\d{2}-\d{2})/);
-    if (match) return match[1];
+    if (!s) return '';
+
+    // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD
+    var mIso = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (mIso) {
+      var y = mIso[1];
+      var m = ('0' + mIso[2]).slice(-2);
+      var d = ('0' + mIso[3]).slice(-2);
+      return y + '-' + m + '-' + d;
+    }
+
+    // 2. Indonesian / Common date format: DD/MM/YYYY or DD-MM-YYYY
+    var mDmy = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+    if (mDmy) {
+      var p1 = parseInt(mDmy[1], 10);
+      var p2 = parseInt(mDmy[2], 10);
+      var yr = mDmy[3];
+      var mo, da;
+      if (p1 > 12) {
+        da = ('0' + p1).slice(-2);
+        mo = ('0' + p2).slice(-2);
+      } else if (p2 > 12) {
+        mo = ('0' + p1).slice(-2);
+        da = ('0' + p2).slice(-2);
+      } else {
+        // Standard in Indonesia (e.g. 12/10/2026 is 12 Oct 2026)
+        da = ('0' + p1).slice(-2);
+        mo = ('0' + p2).slice(-2);
+      }
+      return yr + '-' + mo + '-' + da;
+    }
+
+    // 3. Fallback regex search for any 4 digits followed by 2 digits followed by 2 digits
+    var anyIso = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (anyIso) {
+      var y2 = anyIso[1];
+      var m2 = ('0' + anyIso[2]).slice(-2);
+      var d2 = ('0' + anyIso[3]).slice(-2);
+      return y2 + '-' + m2 + '-' + d2;
+    }
+
     return s;
   }
 
@@ -228,7 +274,7 @@ var InspectionService = (function() {
 
     var currentWeek = getCurrentWeekKey();
     var inspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS).filter(function(i) {
-      var w = normalizeWeek(i['week_key'] || i['week']);
+      var w = normalizeWeek(i['week_key'] || i['week'] || i['Minggu']);
       return w === currentWeek;
     });
 
@@ -242,8 +288,9 @@ var InspectionService = (function() {
 
     var roomsMap = {};
     for (var j = 0; j < allAssets.length; j++) {
-      var r = String(allAssets[j]['Ruangan']).trim();
-      var uId = String(allAssets[j]['ID Unit']).trim();
+      var r = String(allAssets[j]['Ruangan'] || allAssets[j]['ruangan'] || allAssets[j]['room'] || '').trim();
+      var uId = String(allAssets[j]['ID Unit'] || allAssets[j]['unit_id'] || allAssets[j]['asset_id'] || '').trim();
+      if (!r) continue;
       if (!roomsMap[r]) {
         roomsMap[r] = { name: r, totalAssets: 0, activeAssets: 0, inspectedThisWeek: 0 };
       }
@@ -298,10 +345,15 @@ var InspectionService = (function() {
       return c['Aktif'] === true || String(c['Aktif']).toUpperCase() === 'TRUE';
     });
 
+    var allAssetIds = allAssets.map(function(a) {
+      return String(a['ID Unit'] || a['unit_id'] || a['asset_id'] || '').trim();
+    });
+
     var inspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS).filter(function(ins) {
-      var insRoom = String(ins['room_id'] || ins['room'] || '').trim();
-      var insWeek = normalizeWeek(ins['week_key'] || ins['week']);
-      var matchRoom = !insRoom || insRoom.toLowerCase() === cleanRoom.toLowerCase();
+      var insRoom = String(ins['room_id'] || ins['room'] || ins['Ruangan'] || '').trim();
+      var insUnit = String(ins['asset_id'] || ins['unit_id'] || ins['ID Unit'] || '').trim();
+      var insWeek = normalizeWeek(ins['week_key'] || ins['week'] || ins['Minggu']);
+      var matchRoom = !insRoom || insRoom.toLowerCase() === cleanRoom.toLowerCase() || (insUnit && allAssetIds.indexOf(insUnit) >= 0);
       var matchWeek = insWeek === targetWeek;
       return matchRoom && matchWeek;
     });
@@ -316,26 +368,30 @@ var InspectionService = (function() {
           main: row,
           itemizedAnswers: []
         };
+      } else {
+        if (row['completed_at'] || row['created_at']) {
+          insMap[uKey].main = row;
+        }
       }
       // If this row has a specific checklist_id and answer, collect it
-      var chkId = String(row['checklist_id'] || '').trim();
-      var ansVal = String(row['answer'] || '').trim();
+      var chkId = String(row['checklist_id'] || row['point_id'] || row['Checklist ID'] || row['ID Checklist'] || '').trim();
+      var ansVal = String(row['answer'] || row['Jawaban'] || row['Status'] || '').trim();
       if (chkId && ansVal) {
         insMap[uKey].itemizedAnswers.push({
           id: chkId,
-          answer: ansVal,
-          note: row['note'] || ''
+          answer: ansVal.toUpperCase().indexOf('ABNORMAL') >= 0 ? 'ABNORMAL' : 'NORMAL',
+          note: row['note'] || row['Catatan'] || row['Keterangan'] || ''
         });
       }
     }
 
     var findings = SheetHelper.readAllRows(CONFIG.SHEETS.FINDINGS).filter(function(f) {
-      var fWeek = normalizeWeek(f['week_key'] || f['week']);
+      var fWeek = normalizeWeek(f['week_key'] || f['week'] || f['Minggu']);
       return !fWeek || fWeek === targetWeek;
     });
     var findingsMap = {};
     for (var fIdx = 0; fIdx < findings.length; fIdx++) {
-      var fUnit = String(findings[fIdx]['asset_id'] || findings[fIdx]['unit_id'] || '').trim();
+      var fUnit = String(findings[fIdx]['asset_id'] || findings[fIdx]['unit_id'] || findings[fIdx]['ID Unit'] || '').trim();
       if (!findingsMap[fUnit]) findingsMap[fUnit] = [];
       findingsMap[fUnit].push(findings[fIdx]);
     }
@@ -345,15 +401,16 @@ var InspectionService = (function() {
 
     for (var i = 0; i < allAssets.length; i++) {
       var asset = allAssets[i];
-      var unitId = String(asset['ID Unit']).trim();
+      var unitId = String(asset['ID Unit'] || asset['unit_id'] || asset['asset_id'] || '').trim();
       var unitChecklists = allChecklists.filter(function(chk) {
-        return String(chk['ID Unit']).trim() === unitId;
+        var chkUnit = String(chk['ID Unit'] || chk['unit_id'] || chk['asset_id'] || '').trim();
+        return chkUnit === unitId;
       }).map(function(chk) {
         return {
-          id: String(chk['Checklist ID']).trim(),
+          id: String(chk['Checklist ID'] || chk['checklist_id'] || chk['point_id'] || chk['ID Checklist'] || '').trim(),
           unit_id: unitId,
-          order: Number(chk['Urutan']) || 1,
-          question: String(chk['Poin Pemeriksaan']).trim(),
+          order: Number(chk['Urutan'] || chk['order']) || 1,
+          question: String(chk['Poin Pemeriksaan'] || chk['question'] || chk['Pertanyaan'] || '').trim(),
           active: true
         };
       });
@@ -364,27 +421,43 @@ var InspectionService = (function() {
       if (inspected) completedCount++;
 
       var parsedAnswers = [];
-      if (insRecord && insRecord['answers_json']) {
-        try {
-          parsedAnswers = typeof insRecord['answers_json'] === 'string'
-            ? JSON.parse(insRecord['answers_json'])
-            : insRecord['answers_json'];
-        } catch(e) {
-          parsedAnswers = [];
+      if (insRecord) {
+        var rawJson = insRecord['answers_json'] || insRecord['Jawaban JSON'] || insRecord['answers'];
+        if (rawJson) {
+          try {
+            parsedAnswers = typeof rawJson === 'string'
+              ? JSON.parse(rawJson)
+              : rawJson;
+          } catch(e) {
+            parsedAnswers = [];
+          }
         }
       }
       if ((!parsedAnswers || parsedAnswers.length === 0) && insEntry && insEntry.itemizedAnswers && insEntry.itemizedAnswers.length > 0) {
         parsedAnswers = insEntry.itemizedAnswers;
       }
+      // Safe fallback: If inspected but answers array empty in spreadsheet, construct from unit checklists
+      if ((!parsedAnswers || parsedAnswers.length === 0) && inspected) {
+        parsedAnswers = unitChecklists.map(function(chk) {
+          return {
+            id: chk.id,
+            answer: 'NORMAL',
+            note: ''
+          };
+        });
+      }
 
       var unitFindings = findingsMap[unitId] || [];
+      var hasAbnormalFromAnswers = parsedAnswers.some(function(pa) {
+        return String(pa.answer || '').toUpperCase() === 'ABNORMAL';
+      });
 
       units.push({
         unit: {
           id: unitId,
           room: cleanRoom,
-          label: String(asset['Label Pemeriksaan'] || '').trim(),
-          name: String(asset['Nama'] || '').trim(),
+          label: String(asset['Label Pemeriksaan'] || asset['Nama'] || unitId).trim(),
+          name: String(asset['Nama'] || asset['Label Pemeriksaan'] || unitId).trim(),
           qty: Number(asset['Jumlah Standar Sementara']) || 1,
           model: asset['Model'] === 'Kelompok' ? 'Kelompok' : 'Tunggal',
           active: true
@@ -404,7 +477,7 @@ var InspectionService = (function() {
           answers: parsedAnswers,
           findings: unitFindings
         } : null,
-        hasAbnormality: unitFindings.length > 0
+        hasAbnormality: unitFindings.length > 0 || hasAbnormalFromAnswers
       });
     }
 

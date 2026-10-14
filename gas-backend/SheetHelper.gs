@@ -48,8 +48,90 @@ var SheetHelper = (function() {
     return map;
   }
 
+  var HEADER_ALIASES = {
+    'inspection_id': ['inspection_id', 'id_inspeksi', 'id inspeksi', 'ins_id', 'inspection id'],
+    'week_key': ['week_key', 'week', 'minggu', 'periode', 'tanggal', 'week key', 'weekkey'],
+    'asset_id': ['asset_id', 'unit_id', 'id unit', 'id_unit', 'unit', 'inventaris', 'id inventaris', 'asset id', 'unit id'],
+    'room_id': ['room_id', 'room', 'ruangan', 'lokasi', 'room id', 'id ruangan', 'id_ruangan'],
+    'checklist_id': ['checklist_id', 'point_id', 'id checklist', 'id_checklist', 'checklist id', 'poin pemeriksaan', 'poin', 'point id'],
+    'answer': ['answer', 'jawaban', 'status_jawaban', 'hasil', 'kondisi'],
+    'answers_json': ['answers_json', 'answers', 'jawaban_json', 'jawaban json', 'answersjson', 'hasil_json'],
+    'checklist_snapshot': ['checklist_snapshot', 'checklist_snap', 'snapshot', 'snapshot_checklist'],
+    'note': ['note', 'catatan', 'keterangan', 'notes'],
+    'status': ['status', 'status_inspeksi', 'state'],
+    'operator_nip': ['operator_nip', 'last_actor_nip', 'nip_operator', 'nip operator', 'operator', 'nip', 'last actor nip'],
+    'completed_at': ['completed_at', 'created_at', 'updated_at', 'waktu_selesai', 'tanggal_selesai', 'timestamp', 'waktu'],
+    'physical_qty': ['physical_qty', 'jumlah_fisik', 'qty_fisik', 'fisik', 'jumlah standar sementara', 'jumlah fisik'],
+    'usable_qty': ['usable_qty', 'jumlah_layak', 'layak_pakai', 'qty_layak', 'layak', 'jumlah layak pakai'],
+    'finding_id': ['finding_id', 'id_temuan', 'id temuan', 'fnd_id'],
+    'description': ['description', 'deskripsi', 'deskripsi_masalah', 'keterangan_abnormal'],
+    'priority': ['priority', 'prioritas'],
+    'initial_photo_id': ['initial_photo_id', 'photo_id', 'foto_awal', 'photo_file_id', 'foto']
+  };
+
+  function cleanHeaderKey(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function resolveValueFromObject(dataObject, targetHeader) {
+    if (!dataObject) return '';
+    // 1. Direct key match
+    if (dataObject[targetHeader] !== undefined && dataObject[targetHeader] !== null) {
+      return dataObject[targetHeader];
+    }
+    var cleanTarget = cleanHeaderKey(targetHeader);
+    
+    // 2. Clean case-insensitive match on dataObject keys
+    for (var k in dataObject) {
+      if (dataObject.hasOwnProperty(k) && cleanHeaderKey(k) === cleanTarget) {
+        if (dataObject[k] !== undefined && dataObject[k] !== null) {
+          return dataObject[k];
+        }
+      }
+    }
+
+    // 3. Check alias dictionary
+    for (var canonical in HEADER_ALIASES) {
+      var aliases = HEADER_ALIASES[canonical];
+      var matchesCanonical = (cleanTarget === cleanHeaderKey(canonical));
+      if (!matchesCanonical) {
+        for (var a = 0; a < aliases.length; a++) {
+          if (cleanHeaderKey(aliases[a]) === cleanTarget) {
+            matchesCanonical = true;
+            break;
+          }
+        }
+      }
+      if (matchesCanonical) {
+        // Try to find any key in dataObject that matches canonical or any alias
+        if (dataObject[canonical] !== undefined && dataObject[canonical] !== null) {
+          return dataObject[canonical];
+        }
+        for (var a2 = 0; a2 < aliases.length; a2++) {
+          var aliasKey = aliases[a2];
+          if (dataObject[aliasKey] !== undefined && dataObject[aliasKey] !== null) {
+            return dataObject[aliasKey];
+          }
+        }
+        for (var k2 in dataObject) {
+          if (dataObject.hasOwnProperty(k2)) {
+            var cK2 = cleanHeaderKey(k2);
+            for (var a3 = 0; a3 < aliases.length; a3++) {
+              if (cK2 === cleanHeaderKey(aliases[a3])) {
+                return dataObject[k2];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return '';
+  }
+
   /**
    * Reads all data rows and returns an array of plain JavaScript objects { [header]: value }
+   * Also populates canonical aliases so consumers can access fields via standard names.
    */
   function readAllRows(sheetName) {
     var sheet = getSheet(sheetName);
@@ -67,12 +149,31 @@ var SheetHelper = (function() {
       var rowObj = { _rowIndex: r + 1 }; // 1-based index in Sheet
       var hasData = false;
       for (var c = 0; c < headers.length; c++) {
+        var hName = headers[c];
         var val = values[r][c];
         if (val !== '' && val !== null && val !== undefined) {
           hasData = true;
         }
-        rowObj[headers[c]] = val;
+        rowObj[hName] = val;
+
+        // Populate canonical aliases for ease of lookup
+        var cleanH = cleanHeaderKey(hName);
+        for (var canonical in HEADER_ALIASES) {
+          var aliases = HEADER_ALIASES[canonical];
+          if (cleanH === cleanHeaderKey(canonical)) {
+            if (rowObj[canonical] === undefined) rowObj[canonical] = val;
+          } else {
+            for (var a = 0; a < aliases.length; a++) {
+              if (cleanH === cleanHeaderKey(aliases[a])) {
+                if (rowObj[canonical] === undefined) rowObj[canonical] = val;
+                if (rowObj[aliases[a]] === undefined) rowObj[aliases[a]] = val;
+                break;
+              }
+            }
+          }
+        }
       }
+
       if (hasData) {
         rows.push(rowObj);
       }
@@ -98,8 +199,8 @@ var SheetHelper = (function() {
 
     var rowArray = [];
     for (var i = 0; i < headers.length; i++) {
-      var key = headers[i];
-      var val = dataObject[key];
+      var headerName = headers[i];
+      var val = resolveValueFromObject(dataObject, headerName);
       if (val === undefined || val === null) {
         rowArray.push('');
       } else if (typeof val === 'object') {

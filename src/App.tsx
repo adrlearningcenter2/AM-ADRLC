@@ -46,11 +46,20 @@ function AppContent() {
   const [showRequestModal, setShowRequestModal] = useState(false);
 
   // Common Modals State
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [evidenceModal, setEvidenceModal] = useState<{
     isOpen: boolean;
     imageUrl: string;
     title: string;
     desc: string;
+    meta?: {
+      room?: string;
+      unitId?: string;
+      operatorNip?: string;
+      date?: string;
+      status?: string;
+      priority?: string;
+    };
   }>({
     isOpen: false,
     imageUrl: '',
@@ -91,17 +100,31 @@ function AppContent() {
     return () => clearInterval(id);
   }, [isAuthenticated, token, user?.role]);
 
-  const handleOpenPhoto = (imageUrl: string, title: string, desc: string) => {
+  const handleOpenPhoto = (
+    imageUrl: string,
+    title: string,
+    desc: string,
+    meta?: {
+      room?: string;
+      unitId?: string;
+      operatorNip?: string;
+      date?: string;
+      status?: string;
+      priority?: string;
+    }
+  ) => {
     setEvidenceModal({
       isOpen: true,
       imageUrl,
       title,
       desc,
+      meta,
     });
   };
 
   const handleAdminNavigate = (view: AdminViewType, filterRoom?: string) => {
     setAdminView(view);
+    setMobileNavOpen(false);
     if (filterRoom) {
       setMonitoringInitialRoom(filterRoom);
     }
@@ -115,18 +138,23 @@ function AppContent() {
   const pendingRequestsCount = kpi?.pendingRequests ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#F8F6F7] text-stone-900 flex flex-col font-sans">
-      {/* Brand Header with Instant Role Switcher */}
-      <Header onRefreshData={loadDashboardData} />
+    <div className="min-h-screen bg-[#F8F6F7] text-stone-900 flex flex-col font-sans max-w-full overflow-x-hidden">
+      {/* Brand Header with Instant Role Switcher & Mobile Drawer Trigger */}
+      <Header
+        onRefreshData={loadDashboardData}
+        onToggleMobileNav={() => setMobileNavOpen((prev) => !prev)}
+        isMobileNavOpen={mobileNavOpen}
+      />
 
       {/* Simulation Banner (Safe mode reminder) */}
       <SimulationBanner onOpenConfig={() => setShowBackendConfig(true)} />
 
       {/* Main Persona Workspaces */}
       {isAdmin ? (
-        // ADMIN DESKTOP-FIRST LAYOUT
-        <div className="flex-1 flex flex-col md:flex-row">
-          <div className="no-print">
+        // ADMIN RESPONSIVE LAYOUT (Drawer on <1024px, Sidebar on >=1024px)
+        <div className="flex-1 flex flex-col lg:flex-row min-w-0 max-w-full">
+          {/* Desktop Sidebar (Only >=1024px) */}
+          <div className="no-print hidden lg:block shrink-0">
             <AdminSidebar
               currentView={adminView}
               onSelectView={(v) => {
@@ -135,12 +163,31 @@ function AppContent() {
               }}
               openFindingsCount={openFindingsCount}
               pendingRequestsCount={pendingRequestsCount}
+              isMobileDrawer={false}
             />
           </div>
 
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-            {liveError && <div role="alert" className="mb-4 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl">Koneksi LIVE gagal: {liveError}. Data simulasi tidak ditampilkan.</div>}
-            <div className="text-xs text-stone-500 mb-3">Sumber: Google Sheets via API · Sinkronisasi: {lastSync || 'Belum berhasil'}</div>
+          {/* Mobile Drawer (Only <1024px) */}
+          <AdminSidebar
+            currentView={adminView}
+            onSelectView={(v) => {
+              setAdminView(v);
+              setMonitoringInitialRoom(undefined);
+              setMobileNavOpen(false);
+            }}
+            openFindingsCount={openFindingsCount}
+            pendingRequestsCount={pendingRequestsCount}
+            isMobileDrawer={true}
+            isOpen={mobileNavOpen}
+            onClose={() => setMobileNavOpen(false)}
+          />
+
+          <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+            {liveError && <div role="alert" className="mb-4 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl text-xs font-medium">Koneksi LIVE gagal: {liveError}. Data simulasi tidak ditampilkan.</div>}
+            <div className="text-[11px] sm:text-xs text-stone-500 mb-3 flex items-center justify-between gap-2 flex-wrap">
+              <span>Sumber: Google Sheets via API</span>
+              <span>Sinkronisasi: {lastSync || 'Belum berhasil'}</span>
+            </div>
             {adminView === 'dashboard' && kpi && (
               <ExecutiveDashboard
                 kpi={kpi}
@@ -272,6 +319,7 @@ function AppContent() {
         imageUrl={evidenceModal.imageUrl}
         title={evidenceModal.title}
         description={evidenceModal.desc}
+        meta={evidenceModal.meta}
       />
 
       {/* Shared Backend Config & Schema Audit Modal */}
