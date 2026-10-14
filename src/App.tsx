@@ -20,6 +20,7 @@ import { ManagementReport } from './components/admin/ManagementReport';
 import { ApprovalsView } from './components/admin/ApprovalsView';
 import { UsersAndAssignments } from './components/admin/UsersAndAssignments';
 import { AuditTrailView } from './components/admin/AuditTrailView';
+import { AdminBottomNav } from './components/admin/AdminBottomNav';
 
 // Operator Components
 import { OperatorBottomNav, OperatorTab } from './components/operator/OperatorBottomNav';
@@ -183,7 +184,7 @@ function AppContent() {
             onClose={() => setMobileNavOpen(false)}
           />
 
-          <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+          <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 pb-24 lg:pb-8">
             {liveError && <div role="alert" className="mb-4 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl text-xs font-medium">Koneksi LIVE gagal: {liveError}. Data simulasi tidak ditampilkan.</div>}
             <div className="text-[11px] sm:text-xs text-stone-500 mb-3 flex items-center justify-between gap-2 flex-wrap">
               <span>Sumber: Google Sheets via API</span>
@@ -222,6 +223,18 @@ function AppContent() {
 
             {adminView === 'audit' && <AuditTrailView />}
           </main>
+
+          {/* Mobile Bottom Navigation for Admin */}
+          <AdminBottomNav
+            currentView={adminView}
+            onSelectView={(v) => {
+              setAdminView(v);
+              setMonitoringInitialRoom(undefined);
+            }}
+            onOpenDrawer={() => setMobileNavOpen(true)}
+            openFindingsCount={openFindingsCount}
+            pendingRequestsCount={pendingRequestsCount}
+          />
         </div>
       ) : (
         // OPERATOR MOBILE-FIRST LAYOUT
@@ -292,7 +305,7 @@ function AppContent() {
             </div>
           </div>
 
-          <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full">
+          <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full pb-24 md:pb-6">
             {operatorTab === 'rooms' && (
               <LiveRoomsView onViewPhoto={handleOpenPhoto} />
             )}

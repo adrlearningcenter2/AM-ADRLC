@@ -94,20 +94,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </button>
 
-              {/* Account Dropdown */}
+              {/* Account Dropdown & Mobile Role Badge */}
               <div className="relative">
                 <button
                   onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white transition-colors cursor-pointer"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-amber-400 text-stone-950 flex items-center justify-center font-bold text-xs">
+                  <div className="w-6 h-6 rounded-lg bg-amber-400 text-stone-950 flex items-center justify-center font-bold text-xs shrink-0">
                     {user?.name.charAt(0) || 'U'}
                   </div>
-                  <div className="text-left hidden sm:block">
-                    <span className="font-bold text-[11px] text-rose-200 block leading-tight">
+                  <div className="text-left">
+                    <span className="font-bold text-[10px] sm:text-[11px] text-amber-200 block leading-tight uppercase tracking-wider">
                       {user?.role === 'ADMIN' ? 'Admin' : 'Operator'}
                     </span>
-                    <span className="font-semibold text-xs leading-none">
+                    <span className="font-semibold text-xs leading-none hidden sm:block">
                       {user?.name.split(' ')[0]}
                     </span>
                   </div>
@@ -116,13 +116,74 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {showRoleDropdown && (
                   <div
-                    className="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-2xl border border-stone-200 py-2 text-stone-800 z-50 text-xs animate-fadeIn"
-                    onClick={() => setShowRoleDropdown(false)}
+                    className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-stone-200 p-2 text-stone-800 z-50 text-xs animate-fadeIn space-y-1.5"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="border-t border-stone-100 mt-1 pt-1">
+                    <div className="px-3 py-2 bg-stone-50 rounded-xl border border-stone-100">
+                      <div className="font-bold text-stone-900 text-xs truncate">
+                        {user?.name}
+                      </div>
+                      <div className="text-[11px] text-stone-500 font-mono mt-0.5">
+                        NIP: {user?.nip}
+                      </div>
+                      <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-900">
+                        Peran Aktif: {user?.role}
+                      </div>
+                    </div>
+
+                    {/* Quick Role Switcher for Mobile & Preview Testing */}
+                    <div className="pt-1 space-y-1">
+                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider px-2">
+                        Ganti Peran Tampilan
+                      </div>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setShowRoleDropdown(false);
+                            await switchDemoRole('26010006');
+                          }}
+                          className="w-full text-left p-2.5 rounded-xl hover:bg-emerald-50 text-stone-800 hover:text-emerald-900 border border-stone-200/60 hover:border-emerald-300 transition-colors flex items-center gap-2 cursor-pointer touch-press"
+                        >
+                          <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <div>
+                            <div className="font-bold text-xs text-emerald-900">
+                              Mode Operator (Rahmat)
+                            </div>
+                            <div className="text-[10px] text-stone-500">
+                              Buka checklist inspeksi &amp; 5 tab tombol bawah
+                            </div>
+                          </div>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setShowRoleDropdown(false);
+                            await switchDemoRole('26010007');
+                          }}
+                          className="w-full text-left p-2.5 rounded-xl hover:bg-rose-50 text-stone-800 hover:text-[#651D2A] border border-stone-200/60 hover:border-rose-300 transition-colors flex items-center gap-2 cursor-pointer touch-press"
+                        >
+                          <Shield className="w-4 h-4 text-rose-700 shrink-0" />
+                          <div>
+                            <div className="font-bold text-xs text-[#651D2A]">
+                              Mode Admin (ADR LC)
+                            </div>
+                            <div className="text-[10px] text-stone-500">
+                              Monitoring, approval &amp; executive dashboard
+                            </div>
+                          </div>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="border-t border-stone-100 pt-1">
                       <button
-                        onClick={logout}
-                        className="w-full text-left px-3.5 py-2 text-rose-700 hover:bg-rose-50 flex items-center gap-2 font-semibold cursor-pointer"
+                        onClick={() => {
+                          setShowRoleDropdown(false);
+                          logout();
+                        }}
+                        className="w-full text-left px-3 py-2 text-rose-700 hover:bg-rose-50 rounded-xl flex items-center gap-2 font-semibold cursor-pointer touch-press"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         Keluar dari Sesi
