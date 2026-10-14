@@ -524,7 +524,8 @@ var InspectionService = (function() {
   // 6. saveInspection (MUTATION - FULL VALIDATION & SAFE MODE ENFORCEMENT)
   // --------------------------------------------------------------------------
   function saveInspection(token, payload) {
-    var session = AuthService.validateSession(token, ['OPERATOR', 'ADMIN']);
+    // RBAC: Hanya Operator pelaksana yang berwenang mengisi checklist inspeksi inventaris.
+    var session = AuthService.validateSession(token, ['OPERATOR']);
 
     if (!payload || typeof payload !== 'object') {
       throw new Error('Payload inspeksi tidak boleh kosong.');
@@ -861,7 +862,8 @@ var InspectionService = (function() {
   }
 
   function addFollowup(token, findingId, note) {
-    var session = AuthService.validateSession(token, ['OPERATOR', 'ADMIN']);
+    // RBAC: Hanya Operator pelaksana yang berwenang menambahkan tindak lanjut abnormalitas.
+    var session = AuthService.validateSession(token, ['OPERATOR']);
     if (!findingId || typeof findingId !== 'string') {
       throw new Error('Parameter "findingId" wajib disertakan.');
     }
@@ -925,7 +927,9 @@ var InspectionService = (function() {
   }
 
   function closeFinding(token, findingId, note, photoObj) {
-    var session = AuthService.validateSession(token, ['ADMIN']); // Admin supervisor privilege to close finding
+    // RBAC: Hanya Operator yang berwenang menutup/menyelesaikan abnormalitas setelah syarat terpenuhi.
+    // Admin bersifat monitoring dan dilarang menutup abnormalitas secara langsung.
+    var session = AuthService.validateSession(token, ['OPERATOR']);
     if (!findingId || typeof findingId !== 'string') {
       throw new Error('Parameter "findingId" wajib disertakan.');
     }
@@ -958,10 +962,25 @@ var InspectionService = (function() {
 
     var nowStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
     var completionDriveId = '';
-    if (photoObj && photoObj.base64) {
+
+    // Handle flexible photo payload (data URL or object with base64)
+    var base64Payload = '';
+    var mimePayload = 'image/jpeg';
+    if (photoObj) {
+      if (typeof photoObj === 'string' && photoObj.indexOf('base64,') > -1) {
+        var matchMime = photoObj.match(/^data:([^;]+);base64,/);
+        if (matchMime) mimePayload = matchMime[1];
+        base64Payload = photoObj.split('base64,')[1];
+      } else if (typeof photoObj === 'object' && photoObj.base64) {
+        base64Payload = photoObj.base64;
+        mimePayload = photoObj.mime || 'image/jpeg';
+      }
+    }
+
+    if (base64Payload) {
       var uploadRes = DriveService.uploadPhoto(
-        photoObj.base64,
-        photoObj.mime || 'image/jpeg',
+        base64Payload,
+        mimePayload,
         'CLOSE_' + cleanId
       );
       completionDriveId = uploadRes.fileId;
@@ -982,7 +1001,7 @@ var InspectionService = (function() {
       'finding_id': cleanId,
       'actor_nip': session.nip,
       'result': 'REPAIRED',
-      'notes': note || 'Perbaikan selesai dan diverifikasi oleh Admin.',
+      'notes': note || 'Perbaikan selesai dilaksanakan oleh Operator.',
       'physical_qty': target['physical_qty'] || '',
       'usable_qty': target['usable_qty'] || '',
       'photo_id': completionDriveId,
@@ -1025,7 +1044,8 @@ var InspectionService = (function() {
   }
 
   function submitRequest(token, payload) {
-    var session = AuthService.validateSession(token, ['OPERATOR', 'ADMIN']);
+    // RBAC: Operator membuat pengajuan; Admin meninjau & memutuskan (decideRequest)
+    var session = AuthService.validateSession(token, ['OPERATOR']);
     if (!payload || typeof payload !== 'object') {
       throw new Error('Payload pengajuan tidak boleh kosong.');
     }

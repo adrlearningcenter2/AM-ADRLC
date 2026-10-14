@@ -8,13 +8,21 @@ import {
   RotateCcw,
   RefreshCw,
   Loader2,
-  AlertTriangle,
   ShieldCheck,
   Building2,
   Calendar,
-  User
+  User,
+  Copy,
+  Check,
+  Eye
 } from 'lucide-react';
-import { resolveEvidenceUrl, resolveEvidenceDriveLink, extractDriveFileId } from '../../utils/evidence';
+import {
+  resolveEvidenceUrl,
+  resolveEvidenceDriveLink,
+  resolveEvidenceDrivePreview,
+  extractDriveFileId,
+  getPhotoCandidateUrls
+} from '../../utils/evidence';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 interface EvidenceModalProps {
@@ -41,23 +49,31 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   description,
   meta,
 }) => {
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [retryKey, setRetryKey] = useState(0);
+  const [showEmbedPreview, setShowEmbedPreview] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const resolvedSrc = resolveEvidenceUrl(imageUrl);
+  const cleanDriveId = extractDriveFileId(imageUrl);
   const driveLink = resolveEvidenceDriveLink(imageUrl);
-  const rawId = extractDriveFileId(imageUrl) || imageUrl;
-  const isSafeMode = rawId.startsWith('SAFE-MODE') || rawId.startsWith('MOCK') || rawId.startsWith('SAFE_MODE');
+  const drivePreview = resolveEvidenceDrivePreview(imageUrl);
+  const candidateUrls = getPhotoCandidateUrls(imageUrl);
+  const isSafeMode = cleanDriveId.startsWith('SAFE-MODE') || cleanDriveId.startsWith('MOCK') || cleanDriveId.startsWith('SAFE_MODE');
+
+  const currentSrc = candidateUrls[candidateIndex] || resolveEvidenceUrl(imageUrl);
 
   useEffect(() => {
     if (isOpen) {
-      setLoading(Boolean(resolvedSrc));
-      setFailed(!resolvedSrc);
+      setCandidateIndex(0);
+      setLoading(Boolean(currentSrc));
+      setFailed(false);
       setZoom(1);
+      setShowEmbedPreview(false);
+      setCopied(false);
     }
-  }, [imageUrl, isOpen, retryKey]);
+  }, [imageUrl, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -70,10 +86,33 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleImageError = () => {
+    if (candidateIndex + 1 < candidateUrls.length) {
+      // Try next candidate CDN endpoint
+      setCandidateIndex((prev) => prev + 1);
+      setLoading(true);
+    } else {
+      setLoading(false);
+      setFailed(true);
+    }
+  };
+
   const handleRetry = () => {
+    setCandidateIndex(0);
     setLoading(true);
     setFailed(false);
-    setRetryKey((k) => k + 1);
+    setShowEmbedPreview(false);
+  };
+
+  const handleCopyLink = async () => {
+    if (!driveLink) return;
+    try {
+      await navigator.clipboard.writeText(driveLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback
+    }
   };
 
   return (
@@ -142,24 +181,41 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Tutup jendela foto"
-            className="w-11 h-11 rounded-xl flex items-center justify-center text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600 touch-press shrink-0"
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600 touch-press shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </header>
 
-        {/* Image Viewport */}
-        <div className="relative flex-1 min-h-[240px] sm:min-h-[360px] max-h-[58vh] flex items-center justify-center overflow-hidden bg-stone-950 p-2 sm:p-4 select-none">
+        {/* Image / Preview Viewport */}
+        <div className="relative flex-1 min-h-[260px] sm:min-h-[380px] max-h-[60vh] flex items-center justify-center overflow-hidden bg-stone-950 p-2 sm:p-4 select-none">
           {/* Loading Indicator */}
-          {loading && (
+          {loading && !failed && !showEmbedPreview && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stone-950/80 z-10 text-stone-300">
               <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
               <span className="text-xs font-medium">Memuat foto bukti temuan...</span>
             </div>
           )}
 
-          {/* Fallback & Error State */}
-          {failed || !resolvedSrc ? (
+          {/* Embedded Google Drive Iframe Mode */}
+          {showEmbedPreview && drivePreview ? (
+            <div className="w-full h-full flex flex-col items-center justify-center relative">
+              <iframe
+                src={drivePreview}
+                title={title}
+                className="w-full h-[52vh] rounded-xl border border-stone-800 bg-stone-900"
+                allow="autoplay"
+              />
+              <button
+                type="button"
+                onClick={() => setShowEmbedPreview(false)}
+                className="absolute top-3 right-3 px-3 py-1.5 text-xs font-semibold bg-stone-900/90 hover:bg-stone-800 text-stone-200 rounded-lg shadow-md border border-stone-700 cursor-pointer"
+              >
+                Kembali ke Mode Normal
+              </button>
+            </div>
+          ) : failed || !currentSrc ? (
+            /* Fallback & Explanatory State */
             <div role="alert" className="max-w-md text-center text-white p-6 my-auto">
               {isSafeMode ? (
                 <>
@@ -168,55 +224,62 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
                     Dokumentasi Simulasi (Safe Mode)
                   </p>
                   <p className="mt-2 text-xs text-stone-300 leading-relaxed">
-                    Temuan ini tercatat dengan ID simulasi <code className="font-mono text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded">{rawId}</code>.
+                    Temuan ini tercatat dengan ID simulasi <code className="font-mono text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded">{cleanDriveId}</code>.
                     Pada mode Safe Mode, file tidak diunggah ke Google Drive publik untuk melindungi kuota penyimpanan.
                   </p>
                 </>
               ) : (
                 <>
-                  <ImageOff className="mx-auto mb-3 text-rose-400 w-12 h-12" />
-                  <p className="font-bold text-base text-stone-100">
-                    Foto Belum Dapat Ditampilkan
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-3.5 text-rose-400">
+                    <ImageOff className="w-7 h-7" />
+                  </div>
+                  <h3 className="font-extrabold text-base sm:text-lg text-white">
+                    Foto Tersimpan di Google Drive
+                  </h3>
+                  <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
+                    File bukti foto dengan ID <strong className="font-mono text-rose-300">{cleanDriveId || '-'}</strong> tersimpan secara aman di Google Drive organisasi Anda.
                   </p>
-                  <p className="mt-2 text-xs text-stone-300 leading-relaxed">
-                    {rawId
-                      ? `File ID: "${rawId}". Foto privat Google Drive memerlukan izin akses akun atau file telah dipindahkan/dihapus.`
-                      : 'Belum ada bukti foto yang dilampirkan pada catatan abnormalitas ini.'}
-                  </p>
-                  <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={handleRetry}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer touch-press"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Coba Muat Ulang</span>
-                    </button>
+
+                  <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2.5">
                     {driveLink && (
                       <a
                         href={driveLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[44px] rounded-xl bg-[#651D2A] hover:bg-[#7e2939] text-white text-xs font-semibold transition-colors touch-press"
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl bg-[#651D2A] hover:bg-[#7e2939] text-white text-xs font-bold transition-all shadow-md touch-press"
                       >
-                        <span>Buka di Google Drive</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Buka Foto di Google Drive</span>
                       </a>
                     )}
+                    {drivePreview && (
+                      <button
+                        type="button"
+                        onClick={() => setShowEmbedPreview(true)}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer touch-press"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Pratinjau Drive</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRetry}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 text-xs font-semibold transition-colors cursor-pointer touch-press"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Coba Lagi</span>
+                    </button>
                   </div>
                 </>
               )}
             </div>
           ) : (
             <img
-              key={retryKey}
-              src={resolvedSrc}
+              src={currentSrc}
               alt={title}
               onLoad={() => setLoading(false)}
-              onError={() => {
-                setLoading(false);
-                setFailed(true);
-              }}
+              onError={handleImageError}
               style={{
                 transform: `scale(${zoom})`,
                 opacity: loading ? 0 : 1,
@@ -241,7 +304,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             {/* Zoom Controls */}
-            {!failed && resolvedSrc && (
+            {!failed && !showEmbedPreview && currentSrc && (
               <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl">
                 <button
                   type="button"
@@ -277,17 +340,29 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
               {driveLink && (
-                <a
-                  href={driveLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-bold text-[#651D2A] bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors touch-press"
-                >
-                  <span>Lihat di Drive</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-300/80 rounded-xl transition-colors cursor-pointer touch-press"
+                    title="Salin Tautan Google Drive"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-stone-500" />}
+                    <span>{copied ? 'Tersalin' : 'Salin Link'}</span>
+                  </button>
+
+                  <a
+                    href={driveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-bold text-white bg-[#651D2A] hover:bg-[#7e2939] rounded-xl transition-colors shadow-xs touch-press"
+                  >
+                    <span>Buka di Google Drive</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </>
               )}
               <button
                 type="button"

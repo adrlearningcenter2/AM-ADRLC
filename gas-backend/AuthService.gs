@@ -187,7 +187,9 @@ var AuthService = (function() {
         }
       }
       if (!hasRole) {
-        throw new Error('Akses ditolak: Operasi ini membutuhkan role ' + allowedRoles.join(' atau ') + ' (Role Anda: ' + normalizedRole + ').');
+        var forbidErr = new Error('Akses ditolak: Operasi ini membutuhkan role ' + allowedRoles.join(' atau ') + ' (Role Anda: ' + normalizedRole + ').');
+        forbidErr.code = 'FORBIDDEN';
+        throw forbidErr;
       }
     }
 

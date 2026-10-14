@@ -142,8 +142,13 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
   }
 
   // Extract pure file ID if given a full URL
+  // Extract pure file ID if given a full URL or /api/photo/ prefix
   let fileId = cleanId;
-  const driveMatch = cleanId.match(/\/d\/([a-zA-Z0-9_-]+)/) || cleanId.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const apiMatch = cleanId.match(/\/api\/photo(?:\/([a-zA-Z0-9_-]+)|\?.*?(?:id|fileId)=([a-zA-Z0-9_-]+))/i);
+  if (apiMatch) {
+    fileId = apiMatch[1] || apiMatch[2] || cleanId;
+  }
+  const driveMatch = fileId.match(/\/d\/([a-zA-Z0-9_-]+)/) || fileId.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (driveMatch) {
     fileId = driveMatch[1];
   }
@@ -153,7 +158,7 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
     const thumbUrl = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200`;
     const googleRes = await fetch(thumbUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       },
     });
@@ -167,7 +172,29 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
       return;
     }
   } catch (err) {
-    // Continue to GAS authenticated fallback
+    // Continue
+  }
+
+  // 1b. Try Google Drive lh3 CDN endpoint
+  try {
+    const lh3Url = `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}`;
+    const lh3Res = await fetch(lh3Url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      },
+    });
+
+    const lh3Type = lh3Res.headers.get('content-type') || '';
+    if (lh3Res.ok && lh3Type.startsWith('image/')) {
+      const arrayBuffer = await lh3Res.arrayBuffer();
+      res.setHeader('Content-Type', lh3Type);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(Buffer.from(arrayBuffer));
+      return;
+    }
+  } catch (err) {
+    // Continue
   }
 
   // 2. Authenticated Google Apps Script Fallback (for private files)
@@ -175,6 +202,7 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
   const proxySecret = process.env.ADR_PROXY_SECRET || process.env.GAS_PROXY_SECRET || '';
 
   if (gasUrl && gasUrl.startsWith('https://script.google.com/')) {
+    // Try POST
     try {
       const gasRes = await fetch(gasUrl, {
         method: 'POST',
@@ -190,24 +218,56 @@ async function handlePhotoRequest(req: Request, res: Response): Promise<void> {
       });
 
       if (gasRes.ok) {
-        const json = await gasRes.json();
-        if (json && json.success && json.base64 && typeof json.base64 === 'string') {
-          const parts = json.base64.split('base64,');
-          const mime = json.mimeType || (json.base64.match(/^data:([^;]+);/)?.[1] || 'image/jpeg');
-          const buffer = Buffer.from(parts[parts.length - 1], 'base64');
-          res.setHeader('Content-Type', mime);
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          res.send(buffer);
-          return;
+        const text = await gasRes.text();
+        try {
+          const json = JSON.parse(text);
+          if (json && json.success && json.base64 && typeof json.base64 === 'string') {
+            const parts = json.base64.split('base64,');
+            const mime = json.mimeType || (json.base64.match(/^data:([^;]+);/)?.[1] || 'image/jpeg');
+            const buffer = Buffer.from(parts[parts.length - 1], 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.send(buffer);
+            return;
+          }
+        } catch {
+          // Not JSON (e.g. HTML output)
         }
       }
     } catch {
-      // Fall through to clean SVG notice
+      // Continue to GET
+    }
+
+    // Try GET fallback
+    try {
+      const gasGetUrl = `${gasUrl}?action=getPhoto&fileId=${encodeURIComponent(fileId)}`;
+      const gasGetRes = await fetch(gasGetUrl);
+      if (gasGetRes.ok) {
+        const getText = await gasGetRes.text();
+        try {
+          const getJson = JSON.parse(getText);
+          if (getJson && getJson.success && getJson.base64) {
+            const parts = getJson.base64.split('base64,');
+            const mime = getJson.mimeType || 'image/jpeg';
+            const buffer = Buffer.from(parts[parts.length - 1], 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.send(buffer);
+            return;
+          }
+        } catch {
+          // Not JSON
+        }
+      }
+    } catch {
+      // Continue
     }
   }
 
-  // 3. Fallback: Clean SVG notice instead of browser broken image
+  // 3. Fallback: Clean SVG notice with 404 status so client img onError handler fires accurately
+  res.status(404);
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.setHeader('X-Drive-File-Id', fileId);
   res.send(createSvgNotice('Foto Privat Google Drive', 'Akses dibatasi atau file memerlukan izin akun Google', `ID: ${fileId}`));
 }
 
@@ -365,6 +425,14 @@ app.post(
           }
 
           const gasJson = await gasResponse.json();
+          if (gasJson && gasJson.code === 'FORBIDDEN') {
+            res.status(403).json(gasJson);
+            return;
+          }
+          if (gasJson && gasJson.code === 'UNAUTHORIZED') {
+            res.status(401).json(gasJson);
+            return;
+          }
           res.json(gasJson);
           return;
         } catch (gasErr: any) {

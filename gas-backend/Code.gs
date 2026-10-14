@@ -36,14 +36,21 @@ var MUTATION_ACTIONS = [
 var PUBLIC_ACTIONS = [
   'ping',
   'health',
-  'login'
+  'login',
+  'getPhoto'
 ];
 
 /**
- * Public Health Check Endpoint (GET)
+ * Public Health Check & Photo Endpoint (GET)
  * Minimal high-level service status; strictly zero exposure of internal spreadsheet IDs or credentials.
  */
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action).trim() : '';
+  if (action === 'getPhoto' && e.parameter && e.parameter.fileId) {
+    var photoRes = DriveService.getPhoto(e.parameter.fileId);
+    return createJsonResponse(photoRes);
+  }
+
   var response = {
     success: true,
     data: {
@@ -286,7 +293,7 @@ function doPost(e) {
     var userFriendlyMessage = 'Terjadi kesalahan saat memproses permintaan.';
     if (structuredCode === 'PROXY_AUTH_UNCONFIGURED' || structuredCode === 'PROXY_AUTH_FAILED') {
       userFriendlyMessage = rawMessage;
-    } else if (structuredCode === 'UNAUTHORIZED' || structuredCode === 'SESSION_EXPIRED' || structuredCode === 'AUTH_LOCKED') {
+    } else if (structuredCode === 'FORBIDDEN' || structuredCode === 'UNAUTHORIZED' || structuredCode === 'SESSION_EXPIRED' || structuredCode === 'AUTH_LOCKED') {
       userFriendlyMessage = rawMessage;
     } else if (structuredCode === 'INVALID_PARAMS' || structuredCode === 'MISSING_ACTION' || structuredCode === 'EMPTY_PAYLOAD') {
       userFriendlyMessage = rawMessage;

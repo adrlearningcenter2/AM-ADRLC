@@ -417,6 +417,12 @@ export class ApiService {
     operatorNip: string,
     payload: InspectionSubmissionPayload
   ): Promise<{ inspectionId: string; findingsCount: number }> {
+    const actor = MockDatabase.getUsers().find((u) => u.nip === operatorNip);
+    if (actor && actor.role === 'ADMIN') {
+      const roleErr = new Error('Akses ditolak: Admin tidak berwenang mengisi checklist pemeriksaan inventaris atau melaporkan abnormalitas.');
+      (roleErr as any).code = 'FORBIDDEN';
+      throw roleErr;
+    }
     if (!this.isMockMode()) { return this.callGas('saveInspection', {payload}, _token); }
     const currentWeek = getCurrentWeekKey();
     if (payload.week !== currentWeek) {
@@ -558,6 +564,12 @@ export class ApiService {
     note: string,
     photoDataUrl?: string
   ): Promise<boolean> {
+    const actor = MockDatabase.getUsers().find((u) => u.nip === operatorNip);
+    if (actor && actor.role === 'ADMIN') {
+      const roleErr = new Error('Akses ditolak: Admin tidak berwenang menyelesaikan abnormalitas. Penyelesaian abnormalitas wajib dilaksanakan oleh Operator.');
+      (roleErr as any).code = 'FORBIDDEN';
+      throw roleErr;
+    }
     if (!this.isMockMode()) { return this.callGas('closeFinding', {findingId:id,note,photo:photoDataUrl}, _token); }
     if (!note || !note.trim()) {
       throw new Error('Catatan penyelesaian abnormalitas wajib diisi.');
@@ -698,7 +710,16 @@ export class ApiService {
     reason: string,
     payload: OperatorRequest['payload'] = {}
   ): Promise<string> {
-    if (!this.isMockMode()) throw new Error('Fitur submitRequest menunggu penyelarasan kontrak API LIVE; tidak menggunakan data dummy.');
+    const actor = MockDatabase.getUsers().find((u) => u.nip === requesterNip);
+    if (actor && actor.role === 'ADMIN') {
+      const roleErr = new Error('Akses ditolak: Pengajuan izin & perubahan data inventaris diajukan oleh Operator.');
+      (roleErr as any).code = 'FORBIDDEN';
+      throw roleErr;
+    }
+    if (!this.isMockMode()) {
+      return this.callGas('submitRequest', { payload: { type, room_id: room, reason, payload } }, _token)
+        .then((r: any) => r.request_id || r);
+    }
     if (!reason || reason.trim().length < 8) {
       throw new Error('Alasan pengajuan wajib diisi minimal 8 karakter.');
     }
@@ -742,7 +763,15 @@ export class ApiService {
     decision: 'APPROVED' | 'REJECTED',
     note: string
   ): Promise<boolean> {
-    if (!this.isMockMode()) throw new Error('Fitur decideRequest menunggu penyelarasan kontrak API LIVE; tidak menggunakan data dummy.');
+    const actor = MockDatabase.getUsers().find((u) => u.nip === adminNip);
+    if (actor && actor.role !== 'ADMIN') {
+      const roleErr = new Error('Akses ditolak: Hanya Admin yang berwenang meninjau, menyetujui, atau menolak pengajuan.');
+      (roleErr as any).code = 'FORBIDDEN';
+      throw roleErr;
+    }
+    if (!this.isMockMode()) {
+      return this.callGas('decideRequest', { requestId: id, decision: decision === 'APPROVED' ? 'APPROVE' : 'REJECT', reviewNote: note }, _token);
+    }
     const requests = MockDatabase.getRequests();
     const req = requests.find((r) => r.request_id === id);
     if (!req) {
@@ -1007,7 +1036,15 @@ export class ApiService {
     findingId: string,
     note: string
   ): Promise<boolean> {
-    if (!this.isMockMode()) throw new Error('Fitur addFollowup menunggu penyelarasan kontrak API LIVE; tidak menggunakan data dummy.');
+    const actor = MockDatabase.getUsers().find((u) => u.nip === operatorNip);
+    if (actor && actor.role === 'ADMIN') {
+      const roleErr = new Error('Akses ditolak: Admin tidak berwenang melakukan tindak lanjut abnormalitas.');
+      (roleErr as any).code = 'FORBIDDEN';
+      throw roleErr;
+    }
+    if (!this.isMockMode()) {
+      return this.callGas('addFollowup', { findingId, note }, _token);
+    }
     if (!note || !note.trim()) {
       throw new Error('Catatan tindak lanjut wajib diisi.');
     }

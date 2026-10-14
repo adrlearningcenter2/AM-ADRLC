@@ -25,6 +25,7 @@ import { AuditTrailView } from './components/admin/AuditTrailView';
 import { OperatorBottomNav, OperatorTab } from './components/operator/OperatorBottomNav';
 import { OperatorRoomsView } from './components/operator/OperatorRoomsView';
 import { OperatorFollowupsView } from './components/operator/OperatorFollowupsView';
+import { OperatorRequestsView } from './components/operator/OperatorRequestsView';
 import { OperatorRequestModal } from './components/operator/OperatorRequestModal';
 import { OperatorHistoryView } from './components/operator/OperatorHistoryView';
 import { OperatorProfileView } from './components/operator/OperatorProfileView';
@@ -254,10 +255,19 @@ function AppContent() {
                 )}
               </button>
               <button
-                onClick={() => setShowRequestModal(true)}
-                className="py-4 border-b-2 border-transparent text-stone-500 hover:text-[#651D2A] cursor-pointer"
+                onClick={() => setOperatorTab('request')}
+                className={`py-4 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  operatorTab === 'request'
+                    ? 'border-[#651D2A] text-[#651D2A]'
+                    : 'border-transparent text-stone-500 hover:text-stone-900'
+                }`}
               >
-                + Ajukan Permintaan
+                <span>Pengajuan &amp; Status</span>
+                {pendingRequestsCount > 0 && (
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {pendingRequestsCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setOperatorTab('history')}
@@ -283,12 +293,20 @@ function AppContent() {
           </div>
 
           <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full">
-            {operatorTab === 'rooms' && <LiveRoomsView />}
+            {operatorTab === 'rooms' && (
+              <LiveRoomsView onViewPhoto={handleOpenPhoto} />
+            )}
 
             {operatorTab === 'findings' && (
               <OperatorFollowupsView
                 onViewPhoto={handleOpenPhoto}
                 onRefresh={loadDashboardData}
+              />
+            )}
+
+            {operatorTab === 'request' && (
+              <OperatorRequestsView
+                onOpenNewRequest={() => setShowRequestModal(true)}
               />
             )}
 

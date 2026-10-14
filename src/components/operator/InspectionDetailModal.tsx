@@ -55,7 +55,7 @@ interface InspectionDetailModalProps {
   };
   roomName: string;
   weekKey: string;
-  onViewPhoto?: (url: string, title: string, desc: string) => void;
+  onViewPhoto?: (url: string, title: string, desc: string, meta?: any) => void;
 }
 
 export const InspectionDetailModal: React.FC<InspectionDetailModalProps> = ({
@@ -333,9 +333,17 @@ export const InspectionDetailModal: React.FC<InspectionDetailModalProps> = ({
                             onClick={() => {
                               if (onViewPhoto) {
                                 onViewPhoto(
-                                  resolveEvidenceUrl(photoUrl),
-                                  `Bukti Temuan: ${asset.label || asset.name}`,
-                                  f.description || ''
+                                  photoUrl,
+                                  `Bukti Temuan: ${asset.label || asset.name} (${roomName})`,
+                                  f.description || '',
+                                  {
+                                    room: roomName,
+                                    unitId: asset.id,
+                                    operatorNip: asset.inspectionRecord?.operator_nip,
+                                    date: asset.inspectionRecord?.completed_at,
+                                    priority: f.priority || 'SEDANG',
+                                    status: f.status || 'OPEN',
+                                  }
                                 );
                               }
                             }}

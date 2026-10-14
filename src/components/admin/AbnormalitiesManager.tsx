@@ -144,10 +144,10 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
       <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-stone-900">
-            Manajemen Abnormalitas &amp; Tindak Lanjut
+            Monitoring Abnormalitas &amp; Koordinasi PIC
           </h1>
           <p className="text-xs text-stone-500 mt-1">
-            Penugasan perbaikan, koordinasi PIC, monitoring prioritas, dan verifikasi penyelesaian temuan.
+            Pantau temuan abnormalitas, riwayat tindak lanjut, foto bukti awal/penyelesaian, dan koordinasi penugasan.
           </p>
         </div>
 
@@ -168,6 +168,16 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
             </span>{' '}
             Selesai
           </div>
+        </div>
+      </div>
+
+      {/* RBAC Admin Notice */}
+      <div className="bg-stone-50 border border-stone-200 text-stone-700 px-4 py-3 rounded-2xl text-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Eye className="w-4 h-4 text-stone-500 shrink-0" />
+          <span>
+            <strong>Prinsip RBAC Admin:</strong> Halaman ini bersifat monitoring temuan, melihat foto bukti awal &amp; penyelesaian, serta koordinasi PIC penanganan. Penyelesaian dan penutupan status abnormalitas dilakukan secara mandiri oleh Operator pelaksana.
+          </span>
         </div>
       </div>
 

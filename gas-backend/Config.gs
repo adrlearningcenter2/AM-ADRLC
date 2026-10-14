@@ -34,9 +34,9 @@ var CONFIG = {
   SESSION_TTL: 43200,
   
   // SAFE MODE (MUTATION CONTROL)
-  // When false: Mutation operations (Sheets append/update, Drive file uploads,
-  // Audit log writes) are fully ACTIVE and written to Google Sheets & Drive.
-  SAFE_MODE: false,
+  // When true: Mutation operations (Sheets append/update, Drive file uploads,
+  // Audit log writes) are validated but strictly intercepted to prevent modifying production database.
+  SAFE_MODE: true,
   
   // SERVER-TO-SERVER AUTHENTICATION (Proxy <-> GAS)
   // Fail-closed enforcement: When true, ADR_PROXY_SECRET MUST be defined in
