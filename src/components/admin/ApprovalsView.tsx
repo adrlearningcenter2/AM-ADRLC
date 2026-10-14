@@ -22,7 +22,7 @@ interface ApprovalsViewProps {
 }
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [requests, setRequests] = useState<OperatorRequest[]>(MockDatabase.getRequests());
   const [activeTab, setActiveTab] = useState<'PENDING' | 'DECIDED' | 'ALL'>('PENDING');
 
@@ -32,10 +32,26 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
   } | null>(null);
   const [reviewNote, setReviewNote] = useState('');
 
-  const refreshList = () => {
+  const refreshList = async () => {
+    if (token && !ApiService.isMockMode()) {
+      try {
+        const liveReqs = await ApiService.getRequests(token);
+        if (Array.isArray(liveReqs)) {
+          setRequests(liveReqs);
+        }
+        onRefresh();
+        return;
+      } catch (err) {
+        console.warn('Gagal memuat pengajuan live, menggunakan mock:', err);
+      }
+    }
     setRequests(MockDatabase.getRequests());
     onRefresh();
   };
+
+  React.useEffect(() => {
+    refreshList();
+  }, [token]);
 
   const handleOpenDecision = (request: OperatorRequest, decision: 'APPROVED' | 'REJECTED') => {
     setDecisionModal({ request, decision });
@@ -46,14 +62,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
     if (!decisionModal) return;
     try {
       await ApiService.decideRequest(
-        '',
+        token || '',
         user?.nip || '26010007',
         decisionModal.request.request_id,
         decisionModal.decision,
         reviewNote
       );
       setDecisionModal(null);
-      refreshList();
+      await refreshList();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Gagal memproses keputusan');
     }

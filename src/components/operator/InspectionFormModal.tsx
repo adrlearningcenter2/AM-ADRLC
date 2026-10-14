@@ -22,7 +22,12 @@ import { getCurrentWeekKey, formatWeekLabel } from '../../utils/dateUtils';
 interface InspectionFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  asset: AssetUnit & { checks: ChecklistPoint[]; isInspectedThisWeek: boolean };
+  asset: AssetUnit & { 
+    checks: ChecklistPoint[]; 
+    isInspectedThisWeek: boolean;
+    hasAbnormality?: boolean;
+    inspectionRecord?: any;
+  };
   roomName: string;
   onSuccess: () => void;
 }
@@ -41,7 +46,7 @@ export const InspectionFormModal: React.FC<InspectionFormModalProps> = ({
   roomName,
   onSuccess,
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const currentWeek = getCurrentWeekKey();
 
   const isGroup = asset.model === 'Kelompok';
@@ -157,8 +162,10 @@ export const InspectionFormModal: React.FC<InspectionFormModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (asset.isInspectedThisWeek) {
-      setErrorMessage('Inventaris ini sudah diperiksa dan tersimpan untuk minggu berjalan.');
+    // Allow re-submission if re-inspecting an abnormal unit or updating
+    // Only block if inspected and 100% normal without abnormal
+    if (asset.isInspectedThisWeek && !asset.hasAbnormality && !(asset.inspectionRecord?.findings && asset.inspectionRecord.findings.length > 0)) {
+      setErrorMessage('Inventaris ini sudah diperiksa dan 100% Normal untuk minggu berjalan. Hanya unit berstatus Abnormal yang dapat diisi kembali.');
       return;
     }
 
@@ -219,7 +226,7 @@ export const InspectionFormModal: React.FC<InspectionFormModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await ApiService.saveInspection('', user?.nip || '26010006', {
+      const res = await ApiService.saveInspection(token || '', user?.nip || '26010006', {
         week: currentWeek,
         room: roomName,
         unitId: asset.id,

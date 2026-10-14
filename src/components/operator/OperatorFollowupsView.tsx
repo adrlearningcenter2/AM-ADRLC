@@ -28,7 +28,7 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
   onViewPhoto,
   onRefresh,
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [findings, setFindings] = useState<Finding[]>(MockDatabase.getFindings());
 
   const [closingFinding, setClosingFinding] = useState<Finding | null>(null);
@@ -37,10 +37,26 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const refreshList = () => {
+  const refreshList = async () => {
+    if (token && !ApiService.isMockMode()) {
+      try {
+        const live = await ApiService.getFindings(token);
+        if (Array.isArray(live)) {
+          setFindings(live);
+        }
+        onRefresh();
+        return;
+      } catch (err) {
+        console.warn('Gagal memuat temuan live untuk operator:', err);
+      }
+    }
     setFindings(MockDatabase.getFindings());
     onRefresh();
   };
+
+  React.useEffect(() => {
+    refreshList();
+  }, [token]);
 
   const handlePhotoUpload = async (file: File) => {
     setIsCompressing(true);
@@ -66,7 +82,7 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
     setIsSubmitting(true);
     try {
       await ApiService.closeFinding(
-        '',
+        token || '',
         user?.nip || '26010006',
         closingFinding.finding_id,
         closeNote,
@@ -77,7 +93,7 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
       setClosingFinding(null);
       setCloseNote('');
       setClosePhoto(null);
-      refreshList();
+      await refreshList();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Gagal menyelesaikan temuan');
     } finally {

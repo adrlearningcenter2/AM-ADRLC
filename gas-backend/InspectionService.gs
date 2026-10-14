@@ -11,13 +11,34 @@
 
 var InspectionService = (function() {
 
+  function normalizeWeek(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      return Utilities.formatDate(val, 'Asia/Jakarta', 'yyyy-MM-dd');
+    }
+    var s = String(val).trim();
+    var match = s.match(/(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    return s;
+  }
+
   function getCurrentWeekKey() {
-    var now = new Date();
-    // Monday of the current week in Asia/Jakarta timezone
-    var day = now.getDay();
-    var diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    var monday = new Date(now.setDate(diff));
-    return Utilities.formatDate(monday, 'Asia/Jakarta', 'yyyy-MM-dd');
+    var nowJakartaStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
+    // Format: yyyy-MM-dd HH:mm:ss
+    var parts = nowJakartaStr.split(' ')[0].split('-');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10) - 1;
+    var d = parseInt(parts[2], 10);
+    var dt = new Date(y, m, d);
+    var day = dt.getDay(); // 0 is Sunday, 1 is Monday...
+    var diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+    var monday = new Date(y, m, diff);
+    var monY = monday.getFullYear();
+    var monM = String(monday.getMonth() + 1);
+    if (monM.length < 2) monM = '0' + monM;
+    var monD = String(monday.getDate());
+    if (monD.length < 2) monD = '0' + monD;
+    return monY + '-' + monM + '-' + monD;
   }
 
   // --------------------------------------------------------------------------
@@ -77,14 +98,15 @@ var InspectionService = (function() {
   // --------------------------------------------------------------------------
   function getOverview(token, weekKey) {
     AuthService.validateSession(token, ['ADMIN', 'OPERATOR']);
-    var targetWeek = (weekKey && typeof weekKey === 'string' && weekKey.trim()) ? weekKey.trim() : getCurrentWeekKey();
+    var targetWeek = normalizeWeek(weekKey) || getCurrentWeekKey();
 
     var allAssets = SheetHelper.readAllRows(CONFIG.SHEETS.MASTER_UNIT).filter(function(a) {
       return a['Aktif'] === true || String(a['Aktif']).toUpperCase() === 'TRUE';
     });
 
     var inspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS).filter(function(i) {
-      return String(i['week_key']).trim() === targetWeek;
+      var w = normalizeWeek(i['week_key'] || i['week']);
+      return w === targetWeek;
     });
 
     var findings = SheetHelper.readAllRows(CONFIG.SHEETS.FINDINGS);
@@ -204,30 +226,54 @@ var InspectionService = (function() {
       }
     }
 
+    var currentWeek = getCurrentWeekKey();
+    var inspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS).filter(function(i) {
+      var w = normalizeWeek(i['week_key'] || i['week']);
+      return w === currentWeek;
+    });
+
+    var inspectedUnitSet = {};
+    for (var ins = 0; ins < inspections.length; ins++) {
+      var u = String(ins['asset_id'] || ins['unit_id'] || ins['ID Unit'] || '').trim();
+      if (u) {
+        inspectedUnitSet[u] = true;
+      }
+    }
+
     var roomsMap = {};
     for (var j = 0; j < allAssets.length; j++) {
       var r = String(allAssets[j]['Ruangan']).trim();
+      var uId = String(allAssets[j]['ID Unit']).trim();
       if (!roomsMap[r]) {
-        roomsMap[r] = { name: r, totalAssets: 0, activeAssets: 0 };
+        roomsMap[r] = { name: r, totalAssets: 0, activeAssets: 0, inspectedThisWeek: 0 };
       }
       roomsMap[r].totalAssets++;
       roomsMap[r].activeAssets++;
+      if (inspectedUnitSet[uId]) {
+        roomsMap[r].inspectedThisWeek++;
+      }
     }
 
     var list = [];
     for (var rm in roomsMap) {
       if (roomsMap.hasOwnProperty(rm)) {
         var asgObj = assignMap[rm];
+        var total = roomsMap[rm].totalAssets;
+        var inspected = roomsMap[rm].inspectedThisWeek;
+        var isComplete = total > 0 && inspected >= total;
         list.push({
           name: rm,
-          totalAssets: roomsMap[rm].totalAssets,
-          activeAssets: roomsMap[rm].activeAssets,
+          totalAssets: total,
+          activeAssets: total,
+          inspectedThisWeek: inspected,
+          isCompleteThisWeek: isComplete,
+          progressPercent: total > 0 ? Math.round((inspected / total) * 100) : 0,
           assignedOperatorNip: asgObj ? String(asgObj['operator_nip'] || asgObj['main_nip'] || '') : ''
         });
       }
     }
 
-    return { rooms: list };
+    return { rooms: list, weekKey: currentWeek };
   }
 
   // --------------------------------------------------------------------------
@@ -239,11 +285,11 @@ var InspectionService = (function() {
       throw new Error('Parameter "room" wajib diisi.');
     }
 
-    var targetWeek = (weekKey && typeof weekKey === 'string' && weekKey.trim()) ? weekKey.trim() : getCurrentWeekKey();
+    var targetWeek = normalizeWeek(weekKey) || getCurrentWeekKey();
     var cleanRoom = room.trim();
 
     var allAssets = SheetHelper.readAllRows(CONFIG.SHEETS.MASTER_UNIT).filter(function(a) {
-      var matchRoom = String(a['Ruangan']).trim() === cleanRoom;
+      var matchRoom = String(a['Ruangan']).trim().toLowerCase() === cleanRoom.toLowerCase();
       var isActive = a['Aktif'] === true || String(a['Aktif']).toUpperCase() === 'TRUE';
       return matchRoom && isActive;
     });
@@ -253,12 +299,45 @@ var InspectionService = (function() {
     });
 
     var inspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS).filter(function(ins) {
-      return String(ins['room_id']).trim() === cleanRoom && String(ins['week_key']).trim() === targetWeek;
+      var insRoom = String(ins['room_id'] || ins['room'] || '').trim();
+      var insWeek = normalizeWeek(ins['week_key'] || ins['week']);
+      var matchRoom = !insRoom || insRoom.toLowerCase() === cleanRoom.toLowerCase();
+      var matchWeek = insWeek === targetWeek;
+      return matchRoom && matchWeek;
     });
 
     var insMap = {};
     for (var k = 0; k < inspections.length; k++) {
-      insMap[String(inspections[k]['asset_id']).trim()] = inspections[k];
+      var row = inspections[k];
+      var uKey = String(row['asset_id'] || row['unit_id'] || row['ID Unit'] || '').trim();
+      if (!uKey) continue;
+      if (!insMap[uKey]) {
+        insMap[uKey] = {
+          main: row,
+          itemizedAnswers: []
+        };
+      }
+      // If this row has a specific checklist_id and answer, collect it
+      var chkId = String(row['checklist_id'] || '').trim();
+      var ansVal = String(row['answer'] || '').trim();
+      if (chkId && ansVal) {
+        insMap[uKey].itemizedAnswers.push({
+          id: chkId,
+          answer: ansVal,
+          note: row['note'] || ''
+        });
+      }
+    }
+
+    var findings = SheetHelper.readAllRows(CONFIG.SHEETS.FINDINGS).filter(function(f) {
+      var fWeek = normalizeWeek(f['week_key'] || f['week']);
+      return !fWeek || fWeek === targetWeek;
+    });
+    var findingsMap = {};
+    for (var fIdx = 0; fIdx < findings.length; fIdx++) {
+      var fUnit = String(findings[fIdx]['asset_id'] || findings[fIdx]['unit_id'] || '').trim();
+      if (!findingsMap[fUnit]) findingsMap[fUnit] = [];
+      findingsMap[fUnit].push(findings[fIdx]);
     }
 
     var units = [];
@@ -279,9 +358,26 @@ var InspectionService = (function() {
         };
       });
 
-      var insRecord = insMap[unitId];
+      var insEntry = insMap[unitId];
+      var insRecord = insEntry ? insEntry.main : null;
       var inspected = !!insRecord;
       if (inspected) completedCount++;
+
+      var parsedAnswers = [];
+      if (insRecord && insRecord['answers_json']) {
+        try {
+          parsedAnswers = typeof insRecord['answers_json'] === 'string'
+            ? JSON.parse(insRecord['answers_json'])
+            : insRecord['answers_json'];
+        } catch(e) {
+          parsedAnswers = [];
+        }
+      }
+      if ((!parsedAnswers || parsedAnswers.length === 0) && insEntry && insEntry.itemizedAnswers && insEntry.itemizedAnswers.length > 0) {
+        parsedAnswers = insEntry.itemizedAnswers;
+      }
+
+      var unitFindings = findingsMap[unitId] || [];
 
       units.push({
         unit: {
@@ -295,8 +391,20 @@ var InspectionService = (function() {
         },
         checklists: unitChecklists,
         inspectedThisWeek: inspected,
-        inspectionRecord: insRecord || null,
-        hasAbnormality: false
+        inspectionRecord: insRecord ? {
+          inspection_id: insRecord['inspection_id'],
+          week_key: insRecord['week_key'],
+          room_id: cleanRoom,
+          asset_id: unitId,
+          status: insRecord['status'] || 'COMPLETED',
+          completed_at: insRecord['completed_at'] || insRecord['created_at'] || '',
+          operator_nip: insRecord['last_actor_nip'] || insRecord['operator_nip'] || '',
+          physical_qty: insRecord['physical_qty'],
+          usable_qty: insRecord['usable_qty'],
+          answers: parsedAnswers,
+          findings: unitFindings
+        } : null,
+        hasAbnormality: unitFindings.length > 0
       });
     }
 
@@ -420,13 +528,18 @@ var InspectionService = (function() {
       }
     }
 
-    // 3. ATOMIC CHECK: Prevent duplicate submission for this week + unit
+    // 3. ATOMIC CHECK: Check if previous inspection exists for this week + unit
     var existingInspections = SheetHelper.readAllRows(CONFIG.SHEETS.INSPECTIONS);
+    var prevRowIndices = [];
+    var prevInspectionId = '';
     for (var ex = 0; ex < existingInspections.length; ex++) {
-      var exWeek = String(existingInspections[ex]['week_key']).trim();
-      var exUnit = String(existingInspections[ex]['asset_id']).trim();
+      var exWeek = String(existingInspections[ex]['week_key'] || existingInspections[ex]['week'] || '').trim();
+      var exUnit = String(existingInspections[ex]['asset_id'] || existingInspections[ex]['unit_id'] || '').trim();
       if (exWeek === weekKey && exUnit === unitId) {
-        throw new Error('Pemeriksaan unit ' + unitId + ' pada periode minggu ' + weekKey + ' sudah pernah disimpan. Data tidak dapat ditimpa.');
+        prevRowIndices.push(existingInspections[ex]._rowIndex);
+        if (!prevInspectionId && existingInspections[ex]['inspection_id']) {
+          prevInspectionId = String(existingInspections[ex]['inspection_id']).trim();
+        }
       }
     }
 
@@ -463,13 +576,6 @@ var InspectionService = (function() {
       var inspectionId = 'INS-' + stamp + '-' + unitId;
 
       var findingIds = [];
-      var answersJson = JSON.stringify(payload.answers.map(function(ans) {
-        return {
-          id: ans.id,
-          answer: ans.answer,
-          note: ans.note || ''
-        };
-      }));
 
       // Process Abnormal items -> Save photos to Google Drive & Create Findings
       for (var i2 = 0; i2 < payload.answers.length; i2++) {
@@ -491,9 +597,12 @@ var InspectionService = (function() {
           var findingRow = {
             'finding_id': fndId,
             'inspection_id': inspectionId,
+            'week_key': weekKey,
             'asset_id': unitId,
+            'unit_id': unitId,
             'room_id': room,
             'point_id': ansItem.id,
+            'checklist_id': ansItem.id,
             'description': ansItem.note || 'Abnormalitas tercatat pada checklist mingguan.',
             'priority': 'SEDANG',
             'team': 'Fasilitas & Pemeliharaan',
@@ -514,24 +623,44 @@ var InspectionService = (function() {
         }
       }
 
-      // Append INSPECTIONS row
-      var inspectionRow = {
-        'inspection_id': inspectionId,
-        'week_key': weekKey,
-        'room_id': room,
-        'asset_id': unitId,
-        'checklist_snapshot': '',
-        'answers_json': answersJson,
-        'physical_qty': payload.physical !== undefined ? payload.physical : '',
-        'usable_qty': payload.usable !== undefined ? payload.usable : '',
-        'status': 'COMPLETED',
-        'last_actor_nip': session.nip,
-        'started_at': nowStr,
-        'updated_at': nowStr,
-        'completed_at': nowStr
-      };
+      var answersJson = JSON.stringify(payload.answers.map(function(ans) {
+        return {
+          id: ans.id,
+          answer: ans.answer,
+          note: ans.note || ''
+        };
+      }));
 
-      SheetHelper.appendRowByHeader(CONFIG.SHEETS.INSPECTIONS, inspectionRow);
+      // Write each checklist item as 1 row in INSPECTIONS (Itemized format)
+      // and also include answers_json so both schema types (json column F and itemized columns) are 100% populated!
+      for (var aIdx = 0; aIdx < payload.answers.length; aIdx++) {
+        var currAns = payload.answers[aIdx];
+        var itemRow = {
+          'inspection_id': inspectionId,
+          'week_key': weekKey,
+          'room_id': room,
+          'room': room,
+          'asset_id': unitId,
+          'unit_id': unitId,
+          'checklist_id': currAns.id,
+          'answer': currAns.answer,
+          'answers_json': answersJson,
+          'checklist_snapshot': '',
+          'checklist_snap': '',
+          'physical_qty': payload.physical !== undefined ? payload.physical : '',
+          'usable_qty': payload.usable !== undefined ? payload.usable : '',
+          'note': currAns.note || '',
+          'operator_nip': session.nip,
+          'last_actor_nip': session.nip,
+          'status': 'COMPLETED',
+          'started_at': nowStr,
+          'updated_at': nowStr,
+          'completed_at': nowStr,
+          'created_at': nowStr
+        };
+
+        SheetHelper.appendRowByHeader(CONFIG.SHEETS.INSPECTIONS, itemRow);
+      }
 
       // Record Audit Trail
       AuditService.log('INSPECTION_SAVE', session.nip, {

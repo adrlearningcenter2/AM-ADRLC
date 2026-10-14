@@ -17,7 +17,7 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const currentWeek = getCurrentWeekKey();
 
   const [type, setType] = useState<RequestType>('LATE_INSPECTION');
@@ -43,7 +43,7 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await ApiService.submitRequest('', user?.nip || '26010006', type, room, reason, {
+      await ApiService.submitRequest(token || '', user?.nip || '26010006', type, room, reason, {
         deadline: type === 'LATE_INSPECTION' ? deadline : undefined,
         assetName: type === 'ADD_ASSET' ? assetName : undefined,
         findingId: type === 'CANCEL_FINDING' || type === 'REOPEN_FINDING' ? findingId : undefined,

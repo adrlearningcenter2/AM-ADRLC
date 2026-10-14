@@ -141,12 +141,6 @@ function AppContent() {
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
             {liveError && <div role="alert" className="mb-4 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-xl">Koneksi LIVE gagal: {liveError}. Data simulasi tidak ditampilkan.</div>}
             <div className="text-xs text-stone-500 mb-3">Sumber: Google Sheets via API · Sinkronisasi: {lastSync || 'Belum berhasil'}</div>
-            {adminView !== 'dashboard' && adminView !== 'monitoring' && (
-              <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl">
-                Modul {adminView} belum tersambung sepenuhnya ke API LIVE. Ditahan agar tidak menampilkan data dummy. Dashboard tetap mengambil data aktual.
-              </div>
-            )}
-
             {adminView === 'dashboard' && kpi && (
               <ExecutiveDashboard
                 kpi={kpi}
@@ -161,24 +155,24 @@ function AppContent() {
               <LiveRoomsView />
             )}
 
-            {false && adminView === 'findings' && (
+            {adminView === 'findings' && (
               <AbnormalitiesManager
                 onViewPhoto={handleOpenPhoto}
                 onRefresh={loadDashboardData}
               />
             )}
 
-            {false && adminView === 'reports' && <ManagementReport />}
+            {adminView === 'reports' && <ManagementReport />}
 
-            {false && adminView === 'approvals' && (
+            {adminView === 'approvals' && (
               <ApprovalsView onRefresh={loadDashboardData} />
             )}
 
-            {false && adminView === 'users' && (
+            {adminView === 'users' && (
               <UsersAndAssignments onRefresh={loadDashboardData} />
             )}
 
-            {false && adminView === 'audit' && <AuditTrailView />}
+            {adminView === 'audit' && <AuditTrailView />}
           </main>
         </div>
       ) : (
@@ -243,25 +237,17 @@ function AppContent() {
 
           <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full">
             {operatorTab === 'rooms' && <LiveRoomsView />}
-            {operatorTab !== 'rooms' && <div className="p-6 bg-amber-50 border rounded-xl">Modul ini belum terintegrasi dengan data LIVE. Data simulasi tidak ditampilkan.</div>}
-            {false && operatorTab === 'rooms' && (
-              <OperatorRoomsView
-                onRefresh={loadDashboardData}
-                onOpenRequest={() => setShowRequestModal(true)}
-                onViewPhoto={handleOpenPhoto}
-              />
-            )}
 
-            {false && operatorTab === 'findings' && (
+            {operatorTab === 'findings' && (
               <OperatorFollowupsView
                 onViewPhoto={handleOpenPhoto}
                 onRefresh={loadDashboardData}
               />
             )}
 
-            {false && operatorTab === 'history' && <OperatorHistoryView />}
+            {operatorTab === 'history' && <OperatorHistoryView />}
 
-            {false && operatorTab === 'profile' && <OperatorProfileView />}
+            {operatorTab === 'profile' && <OperatorProfileView />}
           </main>
 
           {/* Mobile Bottom Navigation */}
@@ -296,13 +282,11 @@ function AppContent() {
       />
 
       {/* Operator Request Submission Modal */}
-      {false && (
       <OperatorRequestModal
         isOpen={showRequestModal}
         onClose={() => setShowRequestModal(false)}
         onSuccess={loadDashboardData}
       />
-      )}
     </div>
   );
 }

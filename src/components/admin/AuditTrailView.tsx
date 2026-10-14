@@ -13,12 +13,29 @@ import {
 } from 'lucide-react';
 import { AuditLog } from '../../types/adr';
 import { MockDatabase } from '../../services/mockData';
+import { ApiService } from '../../services/apiService';
+import { useAuth } from '../../context/AuthContext';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export const AuditTrailView: React.FC = () => {
-  const [logs] = useState<AuditLog[]>(MockDatabase.getAudit());
+  const { token } = useAuth();
+  const [logs, setLogs] = useState<AuditLog[]>(MockDatabase.getAudit());
   const [actionFilter, setActionFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  React.useEffect(() => {
+    if (token && !ApiService.isMockMode()) {
+      ApiService.getAuditLogs(token)
+        .then((liveLogs) => {
+          if (Array.isArray(liveLogs) && liveLogs.length > 0) {
+            setLogs(liveLogs);
+          }
+        })
+        .catch((err) => {
+          console.warn('Gagal memuat log audit live:', err);
+        });
+    }
+  }, [token]);
 
   const filteredLogs = logs.filter((log) => {
     if (actionFilter !== 'ALL' && log.action !== actionFilter) return false;

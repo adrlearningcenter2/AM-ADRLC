@@ -302,8 +302,12 @@ export class ApiService {
   }
 
   static async getRooms(token: string): Promise<any[]> {
-    const result = await this.callGas('getRooms', {}, token);
-    return result.rooms || [];
+    if (!this.isMockMode()) {
+      const result = await this.callGas('getRooms', {}, token);
+      return result.rooms || [];
+    }
+    const overview = await this.getOverview(token);
+    return overview.rooms || [];
   }
 
   // --- Room & Units Inspection ---
@@ -314,17 +318,35 @@ export class ApiService {
   ): Promise<{
     room: string;
     week: string;
-    assets: (AssetUnit & { checks: ChecklistPoint[]; isInspectedThisWeek: boolean })[];
+    assets: (AssetUnit & {
+      checks: ChecklistPoint[];
+      isInspectedThisWeek: boolean;
+      inspectionRecord?: any;
+    })[];
     inspectedCount: number;
     totalCount: number;
   }> {
-    if (!this.isMockMode()) { return this.callGas('getRoomDetails', {room}, _token).then((r: any) => ({room:r.room,week:r.weekKey,assets:(r.units||[]).map((x:any)=>({...x.unit,checks:x.checklists||[],isInspectedThisWeek:!!x.inspectedThisWeek})),inspectedCount:r.completedCount||0,totalCount:r.totalCount||0})); }
+    if (!this.isMockMode()) {
+      return this.callGas('getRoomDetails', { room }, _token).then((r: any) => ({
+        room: r.room,
+        week: r.weekKey,
+        assets: (r.units || []).map((x: any) => ({
+          ...x.unit,
+          checks: x.checklists || [],
+          isInspectedThisWeek: !!x.inspectedThisWeek,
+          inspectionRecord: x.inspectionRecord || null,
+        })),
+        inspectedCount: r.completedCount || 0,
+        totalCount: r.totalCount || 0,
+      }));
+    }
     const week = getCurrentWeekKey();
     const allAssets = MockDatabase.getAssets().filter((a) => a.room === room && a.active);
     const allChecks = MockDatabase.getChecklists().filter((c) => c.active);
     const currentInspections = MockDatabase.getInspections().filter(
       (i) => i.week_key === week && i.room === room
     );
+    const allFindings = MockDatabase.getFindings().filter((f) => f.week_key === week && f.room === room);
 
     const inspectedUnitIds = new Set(currentInspections.map((i) => i.unit_id));
 
@@ -333,10 +355,43 @@ export class ApiService {
         .filter((c) => c.unit_id === asset.id)
         .sort((a, b) => a.order - b.order);
 
+      const unitInspections = currentInspections.filter((i) => i.unit_id === asset.id);
+      const isInspected = unitInspections.length > 0;
+      const unitFindings = allFindings.filter((f) => f.unit_id === asset.id);
+
+      let record = null;
+      if (isInspected) {
+        const first = unitInspections[0];
+        record = {
+          inspection_id: first.inspection_id,
+          week_key: first.week_key,
+          room_id: first.room,
+          asset_id: first.unit_id,
+          status: 'COMPLETED',
+          completed_at: first.created_at,
+          operator_nip: first.operator_nip,
+          physical_qty: first.physical_qty,
+          usable_qty: first.usable_qty,
+          answers: unitInspections.map((ui) => ({
+            id: ui.checklist_id,
+            answer: ui.answer,
+            note: ui.note || '',
+          })),
+          findings: unitFindings.map((f) => ({
+            finding_id: f.finding_id,
+            description: f.description,
+            priority: f.priority,
+            status: f.status,
+            photo_file_id: f.photo_file_id,
+          })),
+        };
+      }
+
       return {
         ...asset,
         checks,
-        isInspectedThisWeek: inspectedUnitIds.has(asset.id),
+        isInspectedThisWeek: isInspected,
+        inspectionRecord: record,
       };
     });
 
@@ -363,13 +418,16 @@ export class ApiService {
     }
 
     const inspections = MockDatabase.getInspections();
-    const alreadySaved = inspections.some(
+    const existingIndex = inspections.findIndex(
       (x) => x.week_key === payload.week && x.unit_id === payload.unitId
     );
-    if (alreadySaved) {
-      throw new Error(
-        'Inventaris ini sudah disimpan untuk minggu berjalan. Sesuai aturan bisnis, inspeksi tidak dapat ditimpa.'
+    // If already saved, we allow overwrite/update when re-submitting abnormal inspection
+    if (existingIndex >= 0) {
+      // Remove old records for this unit and week
+      const filtered = inspections.filter(
+        (x) => !(x.week_key === payload.week && x.unit_id === payload.unitId)
       );
+      MockDatabase.setInspections(filtered);
     }
 
     const assets = MockDatabase.getAssets();

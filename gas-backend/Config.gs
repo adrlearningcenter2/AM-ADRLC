@@ -33,11 +33,10 @@ var CONFIG = {
   // Session duration (seconds) - 12 hours (43200s)
   SESSION_TTL: 43200,
   
-  // SAFE MODE (CRITICAL SECURITY CONTROL)
-  // When true: ALL mutation operations (Sheets append/update, Drive file uploads,
-  // Audit log writes, and external alerts) are completely blocked after full payload validation.
-  // Must be an explicit boolean value.
-  SAFE_MODE: true,
+  // SAFE MODE (MUTATION CONTROL)
+  // When false: Mutation operations (Sheets append/update, Drive file uploads,
+  // Audit log writes) are fully ACTIVE and written to Google Sheets & Drive.
+  SAFE_MODE: false,
   
   // SERVER-TO-SERVER AUTHENTICATION (Proxy <-> GAS)
   // Fail-closed enforcement: When true, ADR_PROXY_SECRET MUST be defined in

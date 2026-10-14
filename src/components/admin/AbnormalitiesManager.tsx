@@ -30,7 +30,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
   onViewPhoto,
   onRefresh,
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [findings, setFindings] = useState<Finding[]>(MockDatabase.getFindings());
   const [followups, setFollowups] = useState<Followup[]>(MockDatabase.getFollowups());
 
@@ -44,11 +44,31 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
   const [assignedPIC, setAssignedPIC] = useState('');
   const [newPriority, setNewPriority] = useState<FindingPriority>('SEDANG');
 
-  const refreshLocalData = () => {
+  const refreshLocalData = async () => {
+    if (token && !ApiService.isMockMode()) {
+      try {
+        const liveFindings = await ApiService.getFindings(token);
+        if (Array.isArray(liveFindings)) {
+          setFindings(liveFindings);
+        }
+        const liveFollowups = await ApiService.getFollowups(token);
+        if (Array.isArray(liveFollowups)) {
+          setFollowups(liveFollowups);
+        }
+        onRefresh();
+        return;
+      } catch (err) {
+        console.warn('Gagal memuat temuan live, menggunakan data cache/mock:', err);
+      }
+    }
     setFindings(MockDatabase.getFindings());
     setFollowups(MockDatabase.getFollowups());
     onRefresh();
   };
+
+  React.useEffect(() => {
+    refreshLocalData();
+  }, [token]);
 
   const handleOpenCoordModal = (f: Finding) => {
     setCoordinatingFinding(f);
@@ -62,7 +82,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
     try {
       if (newPriority !== coordinatingFinding.priority) {
         await ApiService.updateFindingPriority(
-          '',
+          token || '',
           user?.nip || '26010007',
           coordinatingFinding.finding_id,
           newPriority
@@ -71,7 +91,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
 
       if (coordNote.trim()) {
         await ApiService.markCoordinated(
-          '',
+          token || '',
           user?.nip || '26010007',
           coordinatingFinding.finding_id,
           coordNote,
@@ -79,7 +99,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
         );
       }
 
-      refreshLocalData();
+      await refreshLocalData();
       setCoordinatingFinding(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Gagal menyimpan koordinasi');
