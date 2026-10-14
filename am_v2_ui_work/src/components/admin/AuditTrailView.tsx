@@ -19,20 +19,21 @@ import { formatIndonesianDate } from '../../utils/dateUtils';
 
 export const AuditTrailView: React.FC = () => {
   const { token } = useAuth();
-  const [logs, setLogs] = useState<AuditLog[]>(MockDatabase.getAudit());
+  const [logs, setLogs] = useState<AuditLog[]>(ApiService.isMockMode() ? MockDatabase.getAudit() : []);
   const [actionFilter, setActionFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   React.useEffect(() => {
     if (token && !ApiService.isMockMode()) {
       ApiService.getAuditLogs(token)
         .then((liveLogs) => {
-          if (Array.isArray(liveLogs) && liveLogs.length > 0) {
-            setLogs(liveLogs);
+          if (Array.isArray(liveLogs)) {
+            setLogs(liveLogs); setLoadError('');
           }
         })
         .catch((err) => {
-          console.warn('Gagal memuat log audit live:', err);
+          setLogs([]); setLoadError(err instanceof Error ? err.message : 'Gagal membaca audit trail');
         });
     }
   }, [token]);
@@ -56,6 +57,7 @@ export const AuditTrailView: React.FC = () => {
       case 'INSPECTION_SAVE':
         return (
           <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+      {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">Audit LIVE tidak dapat dimuat: {loadError}</div>}
             Simpan Inspeksi
           </span>
         );
@@ -100,6 +102,7 @@ export const AuditTrailView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">Audit LIVE tidak dapat dimuat: {loadError}</div>}
       {/* Header */}
       <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

@@ -1,3 +1,4 @@
+import { resolveEvidenceUrl } from '../utils/evidence';
 /**
  * Schema Adapter and Architectural Mapping for AM Digital ADR V2
  * 
@@ -261,7 +262,7 @@ export function mapSheetToFinding(row: SheetFindingRow): Finding {
     unit_id: String(row.asset_id || '').trim(),
     checklist_id: String(row.point_id || '').trim(),
     description: String(row.description || '').trim(),
-    photo_file_id: resolveDrivePhotoUrl(row.initial_photo_id),
+    photo_file_id: resolveEvidenceUrl(row.initial_photo_id),
     status: (row.status as any) || 'OPEN',
     priority: (row.priority as any) || 'SEDANG',
     created_by: String(row.created_by || '').trim(),

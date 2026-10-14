@@ -20,6 +20,7 @@ import { ApiService } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge, PriorityBadge } from '../common/StatusBadge';
 import { formatIndonesianDate } from '../../utils/dateUtils';
+import { resolveEvidenceUrl } from '../../utils/evidence';
 
 interface AbnormalitiesManagerProps {
   onViewPhoto: (photoUrl: string, title: string, desc: string) => void;
@@ -31,12 +32,13 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
   onRefresh,
 }) => {
   const { user, token } = useAuth();
-  const [findings, setFindings] = useState<Finding[]>(MockDatabase.getFindings());
-  const [followups, setFollowups] = useState<Followup[]>(MockDatabase.getFollowups());
+  const [findings, setFindings] = useState<Finding[]>(ApiService.isMockMode() ? MockDatabase.getFindings() : []);
+  const [followups, setFollowups] = useState<Followup[]>(ApiService.isMockMode() ? MockDatabase.getFollowups() : []);
 
   const [statusFilter, setStatusFilter] = useState<FindingStatus | 'ALL'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<FindingPriority | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   // Coordination Modal State
   const [coordinatingFinding, setCoordinatingFinding] = useState<Finding | null>(null);
@@ -49,6 +51,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
       try {
         const liveFindings = await ApiService.getFindings(token);
         if (Array.isArray(liveFindings)) {
+          setLoadError('');
           setFindings(liveFindings);
         }
         const liveFollowups = await ApiService.getFollowups(token);
@@ -58,7 +61,8 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
         onRefresh();
         return;
       } catch (err) {
-        console.warn('Gagal memuat temuan live, menggunakan data cache/mock:', err);
+        setLoadError(err instanceof Error ? err.message : 'Gagal memuat data temuan');
+        setFindings([]); setFollowups([]); return;
       }
     }
     setFindings(MockDatabase.getFindings());
@@ -122,6 +126,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
 
   return (
     <div className="space-y-6">
+      {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">Gagal memuat abnormalitas dari database: {loadError}. Data dummy tidak ditampilkan. <button type="button" onClick={refreshLocalData} className="ml-2 font-bold underline">Coba lagi</button></div>}
       {/* Top Header */}
       <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -274,7 +279,7 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
                       className="cursor-pointer group relative rounded-xl overflow-hidden border border-stone-200 bg-stone-100 aspect-video flex items-center justify-center hover:opacity-95 shadow-inner"
                     >
                       <img
-                        src={finding.photo_file_id}
+                        src={resolveEvidenceUrl(finding.photo_file_id)}
                         alt="Bukti abnormal"
                         className="w-full h-full object-cover"
                       />

@@ -19,6 +19,7 @@ import {
 } from '../types/adr';
 import { MockDatabase } from './mockData';
 import { getCurrentWeekKey } from '../utils/dateUtils';
+import { resolveEvidenceUrl } from '../utils/evidence';
 
 export type ApiMode = 'MOCK' | 'GAS_LIVE';
 
@@ -535,12 +536,12 @@ export class ApiService {
   // --- Findings & Followups ---
 
   static async getFindings(_token: string): Promise<Finding[]> {
-    if (!this.isMockMode()) { return this.callGas('getFindings', {}, _token).then((r:any)=>(Array.isArray(r)?r:(r.findings||[])).map((f:any)=>({ ...f, room:f.room_id || f.room || '', unit_id:f.asset_id || f.unit_id || '', checklist_id:f.point_id || f.checklist_id || '', photo_file_id:f.initial_photo_id || f.photo_file_id || '', week_key:f.week_key || '' })));  }
+    if (!this.isMockMode()) { return this.callGas('getFindings', {}, _token).then((r:any)=>(Array.isArray(r)?r:(r.findings||[])).map((f:any)=>({ ...f, room:f.room_id || f.room || '', unit_id:f.asset_id || f.unit_id || '', checklist_id:f.point_id || f.checklist_id || '', photo_file_id:resolveEvidenceUrl(f.initial_photo_id || f.photo_file_id || ''), week_key:f.week_key || '' })));  }
     return MockDatabase.getFindings();
   }
 
   static async getFollowups(_token: string, findingId?: string): Promise<Followup[]> {
-    if (!this.isMockMode()) { return this.callGas('getFollowups', {findingId}, _token).then((r:any)=>Array.isArray(r)?r:(r.followups||[])); }
+    if (!this.isMockMode()) { return this.callGas('getFollowups', {findingId}, _token).then((r:any)=>(Array.isArray(r)?r:(r.followups||[])).map((f:any)=>({...f,photo_file_id:resolveEvidenceUrl(f.photo_id || f.photo_file_id || '')}))); }
     const list = MockDatabase.getFollowups();
     return findingId ? list.filter((f) => f.finding_id === findingId) : list;
   }

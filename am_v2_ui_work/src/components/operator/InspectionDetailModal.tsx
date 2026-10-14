@@ -1,3 +1,4 @@
+import { resolveEvidenceUrl } from '../../utils/evidence';
 import React from 'react';
 import {
   X,
@@ -330,9 +331,7 @@ export const InspectionDetailModal: React.FC<InspectionDetailModalProps> = ({
                             onClick={() => {
                               if (onViewPhoto) {
                                 onViewPhoto(
-                                  photoUrl.startsWith('data:')
-                                    ? photoUrl
-                                    : `https://drive.google.com/uc?export=view&id=${photoUrl}`,
+                                  resolveEvidenceUrl(photoUrl),
                                   `Bukti Temuan: ${asset.label || asset.name}`,
                                   f.description || ''
                                 );

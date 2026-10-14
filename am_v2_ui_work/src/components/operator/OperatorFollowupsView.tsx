@@ -29,7 +29,7 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
   onRefresh,
 }) => {
   const { user, token } = useAuth();
-  const [findings, setFindings] = useState<Finding[]>(MockDatabase.getFindings());
+  const [findings, setFindings] = useState<Finding[]>(ApiService.isMockMode() ? MockDatabase.getFindings() : []);
 
   const [closingFinding, setClosingFinding] = useState<Finding | null>(null);
   const [closeNote, setCloseNote] = useState('');
@@ -47,7 +47,8 @@ export const OperatorFollowupsView: React.FC<OperatorFollowupsViewProps> = ({
         onRefresh();
         return;
       } catch (err) {
-        console.warn('Gagal memuat temuan live untuk operator:', err);
+        console.error('Gagal memuat temuan live untuk operator:', err);
+        setFindings([]); return;
       }
     }
     setFindings(MockDatabase.getFindings());
