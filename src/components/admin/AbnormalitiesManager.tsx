@@ -18,7 +18,9 @@ import { Finding, FindingStatus, FindingPriority, Followup } from '../../types/a
 import { MockDatabase } from '../../services/mockData';
 import { ApiService } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { StatusBadge, PriorityBadge } from '../common/StatusBadge';
+import { EmptyState, RetryState, ButtonLoading } from '../common/FeedbackComponents';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 import { resolveEvidenceUrl } from '../../utils/evidence';
 import { EvidenceThumbnail } from '../common/EvidenceThumbnail';
@@ -87,6 +89,9 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
     refreshLocalData();
   }, [token]);
 
+  const toast = useToast();
+  const [isSubmittingCoord, setIsSubmittingCoord] = useState(false);
+
   const handleOpenCoordModal = (f: Finding) => {
     setCoordinatingFinding(f);
     setCoordNote('');
@@ -95,8 +100,9 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
   };
 
   const handleSaveCoordination = async () => {
-    if (!coordinatingFinding) return;
+    if (!coordinatingFinding || isSubmittingCoord) return;
     try {
+      setIsSubmittingCoord(true);
       if (newPriority !== coordinatingFinding.priority) {
         await ApiService.updateFindingPriority(
           token || '',
@@ -116,10 +122,13 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
         );
       }
 
+      toast.success('Koordinasi & prioritas berhasil diperbarui.');
       await refreshLocalData();
       setCoordinatingFinding(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal menyimpan koordinasi');
+      toast.error(err instanceof Error ? err.message : 'Gagal menyimpan koordinasi');
+    } finally {
+      setIsSubmittingCoord(false);
     }
   };
 
@@ -366,10 +375,19 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
           );
         })}
 
-        {filteredFindings.length === 0 && (
-          <div className="p-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-500 text-sm">
-            Tidak ada abnormalitas yang cocok dengan filter.
-          </div>
+        {loadError && (
+          <RetryState
+            title="Gagal Memuat Daftar Abnormalitas"
+            message={loadError}
+            onRetry={refreshLocalData}
+          />
+        )}
+
+        {!loadError && filteredFindings.length === 0 && (
+          <EmptyState
+            title="Tidak Ada Temuan Abnormalitas"
+            description="Semua unit checklist berada dalam kondisi normal atau tidak ada temuan yang cocok dengan filter aktif."
+          />
         )}
       </div>
 
@@ -453,17 +471,23 @@ export const AbnormalitiesManager: React.FC<AbnormalitiesManagerProps> = ({
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
               <button
                 type="button"
+                disabled={isSubmittingCoord}
                 onClick={() => setCoordinatingFinding(null)}
-                className="px-3 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900"
+                className="px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 type="button"
+                disabled={isSubmittingCoord}
                 onClick={handleSaveCoordination}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#651D2A] hover:bg-[#4B141E] rounded-lg shadow-sm transition-colors"
+                className="px-4 py-2 text-xs font-bold text-white bg-[#651D2A] hover:bg-[#4B141E] rounded-xl shadow-xs transition-colors cursor-pointer touch-press disabled:opacity-50 flex items-center gap-1.5"
               >
-                Simpan Koordinasi
+                {isSubmittingCoord ? (
+                  <ButtonLoading label="Menyimpan..." />
+                ) : (
+                  'Simpan Koordinasi'
+                )}
               </button>
             </div>
           </div>

@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import { Header } from './components/common/Header';
 import { SimulationBanner } from './components/common/SimulationBanner';
 import { EvidenceModal } from './components/common/EvidenceModal';
@@ -373,7 +374,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

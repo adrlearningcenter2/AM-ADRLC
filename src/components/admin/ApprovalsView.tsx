@@ -14,7 +14,9 @@ import { OperatorRequest } from '../../types/adr';
 import { MockDatabase } from '../../services/mockData';
 import { ApiService } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { StatusBadge } from '../common/StatusBadge';
+import { EmptyState, ButtonLoading } from '../common/FeedbackComponents';
 import { formatIndonesianDate } from '../../utils/dateUtils';
 
 interface ApprovalsViewProps {
@@ -23,8 +25,10 @@ interface ApprovalsViewProps {
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
   const { user, token } = useAuth();
+  const toast = useToast();
   const [requests, setRequests] = useState<OperatorRequest[]>(MockDatabase.getRequests());
   const [activeTab, setActiveTab] = useState<'PENDING' | 'DECIDED' | 'ALL'>('PENDING');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [decisionModal, setDecisionModal] = useState<{
     request: OperatorRequest;
@@ -59,12 +63,13 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
   };
 
   const handleConfirmDecision = async () => {
-    if (!decisionModal) return;
+    if (!decisionModal || isSubmitting) return;
     if (user?.role !== 'ADMIN') {
-      alert('Akses Ditolak: Hanya Administrator yang berwenang meninjau, menyetujui, atau menolak pengajuan.');
+      toast.error('Akses Ditolak: Hanya Administrator yang berwenang meninjau, menyetujui, atau menolak pengajuan.');
       return;
     }
     try {
+      setIsSubmitting(true);
       await ApiService.decideRequest(
         token || '',
         user?.nip || '26010007',
@@ -72,10 +77,17 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
         decisionModal.decision,
         reviewNote
       );
+      toast.success(
+        decisionModal.decision === 'APPROVED'
+          ? 'Pengajuan berhasil disetujui.'
+          : 'Pengajuan telah ditolak.'
+      );
       setDecisionModal(null);
       await refreshList();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal memproses keputusan');
+      toast.error(err instanceof Error ? err.message : 'Gagal memproses keputusan');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -293,21 +305,27 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({ onRefresh }) => {
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setDecisionModal(null)}
-                className="px-3 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900"
+                className="px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleConfirmDecision}
-                className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition-colors ${
+                className={`px-4 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors cursor-pointer touch-press disabled:opacity-50 ${
                   decisionModal.decision === 'APPROVED'
                     ? 'bg-emerald-700 hover:bg-emerald-800'
                     : 'bg-rose-700 hover:bg-rose-800'
                 }`}
               >
-                Konfirmasi {decisionModal.decision === 'APPROVED' ? 'Setujui' : 'Tolak'}
+                {isSubmitting ? (
+                  <ButtonLoading label="Menyimpan Keputusan..." />
+                ) : (
+                  `Konfirmasi ${decisionModal.decision === 'APPROVED' ? 'Setujui' : 'Tolak'}`
+                )}
               </button>
             </div>
           </div>

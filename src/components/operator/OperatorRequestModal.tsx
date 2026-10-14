@@ -3,6 +3,8 @@ import { X, Send, AlertCircle, FileQuestion, Calendar, MapPin } from 'lucide-rea
 import { RequestType } from '../../types/adr';
 import { ApiService } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { ButtonLoading } from '../common/FeedbackComponents';
 import { MockDatabase } from '../../services/mockData';
 import { getCurrentWeekKey } from '../../utils/dateUtils';
 
@@ -18,6 +20,7 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
   onSuccess,
 }) => {
   const { user, token } = useAuth();
+  const toast = useToast();
   const currentWeek = getCurrentWeekKey();
 
   const [type, setType] = useState<RequestType>('LATE_INSPECTION');
@@ -37,11 +40,11 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (user?.role === 'ADMIN') {
-      alert('Akses Ditolak: Fitur pengajuan permohonan hanya diperuntukkan bagi Operator pelaksana. Admin bertugas meninjau dan memutuskan (Approval).');
+      toast.error('Akses Ditolak: Fitur pengajuan permohonan hanya diperuntukkan bagi Operator pelaksana. Admin bertugas meninjau dan memutuskan (Approval).');
       return;
     }
     if (reason.trim().length < 8) {
-      alert('Alasan pengajuan wajib diisi minimal 8 karakter');
+      toast.warning('Alasan pengajuan wajib diisi minimal 8 karakter.');
       return;
     }
 
@@ -53,11 +56,11 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
         findingId: type === 'CANCEL_FINDING' || type === 'REOPEN_FINDING' ? findingId : undefined,
       });
 
-      alert('Permohonan berhasil dikirim ke Admin untuk ditinjau.');
+      toast.success('Permohonan berhasil dikirim ke Admin untuk ditinjau.');
       onSuccess();
       onClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal mengirim pengajuan');
+      toast.error(err instanceof Error ? err.message : 'Gagal mengirim pengajuan');
     } finally {
       setIsSubmitting(false);
     }
@@ -191,10 +194,16 @@ export const OperatorRequestModal: React.FC<OperatorRequestModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-bold text-white bg-[#651D2A] hover:bg-[#4B141E] rounded-lg shadow-sm flex items-center gap-1.5"
+              className="px-4 py-2 text-xs font-bold text-white bg-[#651D2A] hover:bg-[#4B141E] rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer touch-press disabled:opacity-50"
             >
-              <Send className="w-3.5 h-3.5" />
-              {isSubmitting ? 'Mengirim...' : 'Kirim Pengajuan'}
+              {isSubmitting ? (
+                <ButtonLoading label="Mengirim..." />
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Kirim Pengajuan</span>
+                </>
+              )}
             </button>
           </div>
         </form>
